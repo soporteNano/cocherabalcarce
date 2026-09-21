@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cochera Balcarce</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <section id="login-view" class="login-shell">
+    <form id="login-form" class="login-card">
+      <div class="brand-mark">CB</div>
+      <p class="eyebrow">Sistema local</p>
+      <h1>Cochera Balcarce</h1>
+      <p class="muted">Ingresá para comenzar tu turno.</p>
+      <label>Usuario<input name="username" autocomplete="username" required autofocus></label>
+      <label>Contraseña<input type="password" name="password" autocomplete="current-password" required></label>
+      <button type="submit" class="primary wide">Ingresar</button>
+      <p id="login-error" class="form-error" role="alert"></p>
+    </form>
+  </section>
+
+  <div id="app-view" class="app hidden">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark small">CB</span><div><strong>Cochera</strong><small>Balcarce</small></div></div>
+      <nav>
+        <button class="nav-item active" data-view="operation">Operación</button>
+        <button class="nav-item" data-view="users" data-admin>Empleados y usuarios</button>
+        <button class="nav-item" data-view="rates" data-admin>Tarifas</button>
+      </nav>
+      <div class="user-box"><strong id="user-name"></strong><span id="user-role"></span><button id="logout" class="link-button">Cerrar sesión</button></div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div><p class="eyebrow">Panel operativo</p><h2 id="page-title">Movimiento del día</h2></div>
+        <div id="shift-status" class="status-chip"></div>
+      </header>
+
+      <section id="operation-view" class="page-view">
+        <div class="stats-grid">
+          <article class="stat-card accent"><span>Vehículos dentro</span><strong id="stat-open">0</strong></article>
+          <article class="stat-card"><span>Salidas de hoy</span><strong id="stat-exits">0</strong></article>
+          <article class="stat-card"><span>Cobrado hoy</span><strong id="stat-charged">$ 0</strong></article>
+        </div>
+
+        <section id="shift-panel" class="panel"></section>
+
+        <div class="work-grid">
+          <section class="panel entry-panel">
+            <div class="section-heading"><div><p class="eyebrow">Nuevo movimiento</p><h3>Registrar ingreso</h3></div></div>
+            <form id="entry-form">
+              <label>Patente<input name="plate" class="plate-input" maxlength="9" placeholder="AA123BB" required></label>
+              <label>Categoría<select name="categoryId" id="entry-category" required></select></label>
+              <button class="primary wide" type="submit">Registrar entrada</button>
+            </form>
+          </section>
+
+          <section class="panel vehicles-panel">
+            <div class="section-heading"><div><p class="eyebrow">Estado actual</p><h3>Vehículos dentro</h3></div><button id="refresh" class="secondary">Actualizar</button></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Patente</th><th>Categoría</th><th>Ingreso</th><th>Tiempo</th><th></th></tr></thead>
+                <tbody id="tickets-body"></tbody>
+              </table>
+              <p id="empty-tickets" class="empty">No hay vehículos dentro.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="users-view" class="page-view hidden">
+        <div class="admin-grid">
+          <section class="panel">
+            <div class="section-heading"><div><p class="eyebrow">Nuevo acceso</p><h3>Agregar empleado</h3></div></div>
+            <form id="create-user-form">
+              <label>Nombre completo<input name="displayName" required minlength="3" autocomplete="off"></label>
+              <label>Nombre de usuario<input name="username" required minlength="3" maxlength="30" autocomplete="off"></label>
+              <label>Rol<select name="role"><option value="employee">Empleado / cajero</option><option value="coordinator">Coordinador / encargado</option><option value="admin">Administrador</option></select></label>
+              <label>Contraseña inicial<input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
+              <button class="primary wide" type="submit">Crear usuario</button>
+            </form>
+          </section>
+          <section class="panel">
+            <div class="section-heading"><div><p class="eyebrow">Personal</p><h3>Empleados y usuarios</h3></div></div>
+            <div class="table-wrap">
+              <table><thead><tr><th>Empleado</th><th>Usuario</th><th>Rol</th><th>Acceso</th><th></th></tr></thead><tbody id="users-body"></tbody></table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="rates-view" class="page-view hidden">
+        <section class="panel">
+          <div class="section-heading"><div><p class="eyebrow">Protección de datos</p><h3>Respaldo local</h3><p id="backup-status" class="muted">Consultando estado…</p></div><button id="backup-now" class="secondary">Crear respaldo ahora</button></div>
+        </section>
+        <section class="panel">
+          <div class="section-heading"><div><p class="eyebrow">Administración</p><h3>Tarifas por categoría</h3></div><span class="info-note">Los cambios rigen desde el día siguiente.</span></div>
+          <div id="rate-cards" class="rate-grid"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="charge-dialog">
+    <form id="charge-form" method="dialog" class="dialog-card">
+      <div class="section-heading"><div><p class="eyebrow">Registrar salida</p><h3 id="charge-title">Cobrar ticket</h3></div><button type="button" class="icon-button" data-close-dialog>×</button></div>
+      <input type="hidden" name="ticketId">
+      <label>Modalidad de cobro<select name="mode"><option value="fraction">Fracciones de 30 minutos</option><option value="daily">Estadía diaria</option><option value="24h">Estadía de 24 horas</option></select></label>
+      <div class="quote-box"><span id="quote-time">—</span><strong id="quote-amount">$ 0</strong><small id="quote-detail"></small></div>
+      <label>Importe final<input type="number" min="0" step="0.01" name="chargedAmount" required></label>
+      <div class="section-heading payment-heading"><strong>Medios de pago</strong><button type="button" id="add-payment" class="secondary">Agregar otro</button></div>
+      <div id="payment-rows"></div>
+      <label>Motivo de excepción<textarea name="exceptionReason" rows="2" placeholder="Obligatorio si cambia el importe"></textarea></label>
+      <div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Cancelar</button><button type="submit" class="primary">Confirmar cobro y salida</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
