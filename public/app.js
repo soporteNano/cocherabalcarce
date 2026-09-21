@@ -1,6 +1,6 @@
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [...parent.querySelectorAll(selector)];
-const state = { user: null, categories: [], methods: [], tickets: [], users: [], subscribers: [], quote: null };
+const state = { user: null, categories: [], allCategories: [], methods: [], tickets: [], users: [], subscribers: [], quote: null };
 
 const money = (cents = 0) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 2 }).format(cents / 100);
 const dateTime = (value) => new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
@@ -37,22 +37,25 @@ function showApp() {
 }
 
 async function loadAll() {
-  const [dashboard, categories, methods, tickets, subscribers, users] = await Promise.all([
+  const [dashboard, categories, methods, tickets, subscribers, users, allCategories] = await Promise.all([
     request("/api/dashboard"), request("/api/categories"), request("/api/payment-methods"), request("/api/tickets"),
     request("/api/subscribers"),
-    state.user.role === "admin" ? request("/api/users") : Promise.resolve({ users: [] })
+    state.user.role === "admin" ? request("/api/users") : Promise.resolve({ users: [] }),
+    state.user.role === "admin" ? request("/api/categories/all") : Promise.resolve({ categories: [] })
   ]);
   state.categories = categories.categories;
   state.methods = methods.methods;
   state.tickets = tickets.tickets;
   state.users = users?.users || [];
   state.subscribers = subscribers.subscribers;
+  state.allCategories = allCategories.categories;
   renderDashboard(dashboard);
   renderCategories();
   renderTickets();
   renderRates();
   renderUsers();
   renderSubscribers();
+  renderCategoryAdmin();
 }
 
 const roleLabel = (role) => ({ employee: "Empleado / cajero", coordinator: "Coordinador", admin: "Administrador" })[role] || role;
@@ -120,6 +123,30 @@ function renderDashboard(data) {
 function renderCategories() {
   $("#entry-category").innerHTML = state.categories.map((category) => `<option value="${category.id}">${category.name}</option>`).join("");
   $("#subscriber-category").innerHTML = state.categories.map((category) => `<option value="${category.id}">${category.name}</option>`).join("");
+}
+
+function renderCategoryAdmin() {
+  const tbody = $("#categories-admin-body");
+  if (!tbody) return;
+  tbody.innerHTML = state.allCategories.map((category) => `
+    <tr data-category-id="${category.id}">
+      <td><input class="category-name-input" value="${escapeHtml(category.name)}"></td>
+      <td>${category.ticket_count} ticket/s · ${category.subscriber_count} abonado/s</td>
+      <td><label class="status-toggle"><input class="category-active" type="checkbox" ${category.active ? "checked" : ""}> Activa</label></td>
+      <td><button type="button" class="secondary save-category">Guardar</button></td>
+    </tr>
+  `).join("");
+  $$(".save-category", tbody).forEach((button) => button.onclick = () => saveCategory(button.closest("tr")));
+}
+
+async function saveCategory(row) {
+  try {
+    await request(`/api/categories/${row.dataset.categoryId}`, { method: "PATCH", body: JSON.stringify({
+      name: $(".category-name-input", row).value,
+      active: $(".category-active", row).checked
+    }) });
+    toast("Categoría actualizada."); await loadAll();
+  } catch (error) { toast(error.message, true); }
 }
 
 function renderSubscribers() {
@@ -312,6 +339,14 @@ $("#create-user-form").onsubmit = async (event) => {
     form.reset(); toast("Empleado creado correctamente."); await loadAll();
   } catch (error) { toast(error.message, true); }
 };
+$("#create-category-form").onsubmit = async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  try {
+    await request("/api/categories", { method: "POST", body: JSON.stringify({ name: form.name.value }) });
+    form.reset(); toast("Categoría creada."); await loadAll();
+  } catch (error) { toast(error.message, true); }
+};
 $("#subscriber-form").onsubmit = async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -375,7 +410,7 @@ $$('.nav-item').forEach((button) => button.onclick = () => {
   $$('.nav-item').forEach((item) => item.classList.toggle("active", item === button));
   $$('.page-view').forEach((view) => view.classList.add("hidden"));
   $(`#${button.dataset.view}-view`).classList.remove("hidden");
-  $("#page-title").textContent = ({ rates: "Configuración de tarifas", users: "Empleados y usuarios", subscribers: "Abonados mensuales", operation: "Movimiento del día" })[button.dataset.view];
+  $("#page-title").textContent = ({ rates: "Categorías y tarifas", users: "Empleados y usuarios", subscribers: "Abonados mensuales", operation: "Movimiento del día" })[button.dataset.view];
 });
 
 request("/api/session").then(async ({ user }) => {

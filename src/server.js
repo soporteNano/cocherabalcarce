@@ -305,14 +305,51 @@ async function api(req, res, url) {
     json(res, 200, { categories: rows }); return;
   }
 
+  if (req.method === "GET" && url.pathname === "/api/categories/all") {
+    if (!requireUser(req, res, ["admin"])) return;
+    const rows = db.prepare(`
+      SELECT c.id, c.name, c.active, c.created_at,
+        (SELECT COUNT(*) FROM tickets t WHERE t.category_id = c.id) ticket_count,
+        (SELECT COUNT(*) FROM subscriptions s WHERE s.category_id = c.id) subscriber_count
+      FROM categories c ORDER BY c.active DESC, c.name COLLATE NOCASE
+    `).all();
+    json(res, 200, { categories: rows }); return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/categories") {
     if (!requireUser(req, res, ["admin"])) return;
     const body = await readBody(req);
     const name = String(body.name || "").trim();
     if (name.length < 2) throw new Error("Ingrese un nombre de categoría.");
-    const result = db.prepare("INSERT INTO categories (name) VALUES (?)").run(name);
-    audit(user.id, "create", "category", result.lastInsertRowid, { name });
-    json(res, 201, { id: Number(result.lastInsertRowid), name }); return;
+    try {
+      const result = db.prepare("INSERT INTO categories (name) VALUES (?)").run(name);
+      audit(user.id, "create", "category", result.lastInsertRowid, { name });
+      json(res, 201, { id: Number(result.lastInsertRowid), name });
+    } catch (error) {
+      if (String(error.message).includes("UNIQUE")) throw new Error("Ya existe una categoría con ese nombre.");
+      throw error;
+    }
+    return;
+  }
+
+  const categoryMatch = url.pathname.match(/^\/api\/categories\/(\d+)$/);
+  if (req.method === "PATCH" && categoryMatch) {
+    if (!requireUser(req, res, ["admin"])) return;
+    const categoryId = Number(categoryMatch[1]);
+    const body = await readBody(req);
+    const name = String(body.name || "").trim();
+    const active = body.active ? 1 : 0;
+    if (name.length < 2) throw new Error("Ingrese un nombre de categoría.");
+    if (!db.prepare("SELECT id FROM categories WHERE id = ?").get(categoryId)) throw new Error("Categoría no encontrada.");
+    try {
+      db.prepare("UPDATE categories SET name = ?, active = ? WHERE id = ?").run(name, active, categoryId);
+      audit(user.id, "update", "category", categoryId, { name, active: Boolean(active) });
+      json(res, 200, { ok: true });
+    } catch (error) {
+      if (String(error.message).includes("UNIQUE")) throw new Error("Ya existe una categoría con ese nombre.");
+      throw error;
+    }
+    return;
   }
 
   if (req.method === "POST" && url.pathname === "/api/tariffs") {

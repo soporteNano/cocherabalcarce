@@ -58,6 +58,7 @@ npm test
 - Inicio de sesión y perfiles base.
 - ABM de empleados y usuarios: alta, roles, activación, desactivación y restablecimiento de contraseña.
 - ABM de abonados mensuales con datos de contacto, plan, categoría, fecha de alta y múltiples patentes.
+- ABM de categorías de vehículos, con activación y desactivación sin perder el historial.
 - Suspensión y reactivación de abonados por administradores y coordinadores, con motivo auditado.
 - Apertura y cierre de turnos.
 - Comprobante imprimible de cierre con movimientos, arqueo y vehículos que permanecen dentro por categoría.
