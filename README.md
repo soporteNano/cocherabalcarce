@@ -4,7 +4,7 @@ Primera versión de la aplicación local para controlar ingresos, salidas, tarif
 
 ## Requisitos
 
-- Windows.
+- Windows 10/11 o una distribución Linux moderna de 64 bits.
 - Node.js 24 o posterior.
 
 No requiere instalar paquetes adicionales.
@@ -20,6 +20,19 @@ npm start
 Luego abrir <http://127.0.0.1:3210> en el navegador.
 
 En Windows también se puede iniciar con doble clic en `Iniciar Cochera.cmd`.
+
+### Inicio en Linux
+
+Después de descargar o clonar el proyecto:
+
+```bash
+chmod +x iniciar-cochera.sh
+./iniciar-cochera.sh
+```
+
+Si el entorno gráfico no abre el navegador automáticamente, ingresar manualmente a <http://127.0.0.1:3210>.
+
+Para instalarlo como servicio y lograr que se inicie junto con Linux, se puede crear posteriormente una unidad de `systemd`. La base de datos seguirá ubicada en `data/cochera.sqlite` y los respaldos en `backups`.
 
 El primer acceso de desarrollo es:
 
