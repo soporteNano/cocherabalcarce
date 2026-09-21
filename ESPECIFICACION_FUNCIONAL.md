@@ -87,6 +87,8 @@ Existirán dos planes:
 
 Un abonado podrá registrar varias patentes, pero cada abono dará derecho a un solo vehículo dentro al mismo tiempo. El lugar no será fijo.
 
+El ABM de abonados conservará nombre, DNI o CUIT, teléfono, correo electrónico, tipo de plan, categoría de facturación, fecha de alta y patentes autorizadas. El administrador podrá crear y modificar estos datos. El coordinador o el administrador podrán suspender y reactivar accesos, dejando el motivo auditado. Las bajas conservarán el historial.
+
 Si otra patente del mismo abono ya está dentro, el sistema mostrará una alerta. El empleado decidirá manualmente, según la disponibilidad, si autoriza el ingreso con el mismo abono o registra una estadía común. La decisión quedará auditada.
 
 Si un abonado mensual diurno permanece fuera del horario permitido, el sistema mostrará una alerta. El empleado podrá resolver manualmente si no aplica recargo, cobra una estadía de 24 horas o utiliza otro importe. La decisión y el motivo quedarán registrados.

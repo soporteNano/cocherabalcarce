@@ -1,6 +1,6 @@
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [...parent.querySelectorAll(selector)];
-const state = { user: null, categories: [], methods: [], tickets: [], users: [], quote: null };
+const state = { user: null, categories: [], methods: [], tickets: [], users: [], subscribers: [], quote: null };
 
 const money = (cents = 0) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 2 }).format(cents / 100);
 const dateTime = (value) => new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
@@ -37,20 +37,22 @@ function showApp() {
 }
 
 async function loadAll() {
-  const calls = [
-    request("/api/dashboard"), request("/api/categories"), request("/api/payment-methods"), request("/api/tickets")
-  ];
-  if (state.user.role === "admin") calls.push(request("/api/users"));
-  const [dashboard, categories, methods, tickets, users] = await Promise.all(calls);
+  const [dashboard, categories, methods, tickets, subscribers, users] = await Promise.all([
+    request("/api/dashboard"), request("/api/categories"), request("/api/payment-methods"), request("/api/tickets"),
+    request("/api/subscribers"),
+    state.user.role === "admin" ? request("/api/users") : Promise.resolve({ users: [] })
+  ]);
   state.categories = categories.categories;
   state.methods = methods.methods;
   state.tickets = tickets.tickets;
   state.users = users?.users || [];
+  state.subscribers = subscribers.subscribers;
   renderDashboard(dashboard);
   renderCategories();
   renderTickets();
   renderRates();
   renderUsers();
+  renderSubscribers();
 }
 
 const roleLabel = (role) => ({ employee: "Empleado / cajero", coordinator: "Coordinador", admin: "Administrador" })[role] || role;
@@ -117,6 +119,71 @@ function renderDashboard(data) {
 
 function renderCategories() {
   $("#entry-category").innerHTML = state.categories.map((category) => `<option value="${category.id}">${category.name}</option>`).join("");
+  $("#subscriber-category").innerHTML = state.categories.map((category) => `<option value="${category.id}">${category.name}</option>`).join("");
+}
+
+function renderSubscribers() {
+  const tbody = $("#subscribers-body");
+  const labels = { active: "Activo", suspended: "Suspendido", inactive: "Inactivo" };
+  tbody.innerHTML = state.subscribers.map((item) => {
+    const statusAction = item.status === "suspended"
+      ? `<button type="button" class="secondary subscriber-status" data-status="active">Reactivar</button>`
+      : item.status === "active" ? `<button type="button" class="secondary subscriber-status" data-status="suspended">Suspender</button>`
+      : state.user.role === "admin" ? `<button type="button" class="secondary subscriber-status" data-status="active">Reactivar</button>` : "";
+    const editAction = state.user.role === "admin" ? `<button type="button" class="secondary edit-subscriber">Editar</button>` : "";
+    const deactivateAction = state.user.role === "admin" && item.status !== "inactive" ? `<button type="button" class="secondary subscriber-status" data-status="inactive">Dar de baja</button>` : "";
+    const actions = state.user.role === "employee" ? "" : `${editAction}${statusAction}${deactivateAction}`;
+    return `<tr data-subscriber-id="${item.id}">
+      <td><span class="subscriber-contact"><strong>${escapeHtml(item.full_name)}</strong><small>${escapeHtml(item.document || item.phone || "Sin datos de contacto")}</small></span></td>
+      <td>${item.plan === "full" ? "Mensual completo" : "Mensual diurno"}<br><small>${escapeHtml(item.category_name)}</small></td>
+      <td><div class="plate-tags">${item.plates.map((plate) => `<span class="plate-tag">${escapeHtml(plate)}</span>`).join("")}</div></td>
+      <td><span class="state-badge state-${item.status}" title="${escapeHtml(item.suspension_reason || "")}">${labels[item.status]}</span></td>
+      <td><div class="table-actions">${actions}</div></td>
+    </tr>`;
+  }).join("");
+  $("#empty-subscribers").classList.toggle("hidden", state.subscribers.length > 0);
+  $$(".edit-subscriber", tbody).forEach((button) => button.onclick = () => editSubscriber(Number(button.closest("tr").dataset.subscriberId)));
+  $$(".subscriber-status", tbody).forEach((button) => button.onclick = () => changeSubscriberStatus(Number(button.closest("tr").dataset.subscriberId), button.dataset.status));
+}
+
+function editSubscriber(id) {
+  const item = state.subscribers.find((subscriber) => subscriber.id === id);
+  const form = $("#subscriber-form");
+  form.subscriberId.value = item.id;
+  form.fullName.value = item.full_name;
+  form.document.value = item.document || "";
+  form.phone.value = item.phone || "";
+  form.email.value = item.email || "";
+  form.plan.value = item.plan;
+  form.categoryId.value = item.category_id;
+  form.startDate.value = item.start_date;
+  form.plates.value = item.plates.join(", ");
+  $("#subscriber-form-title").textContent = "Modificar abonado";
+  $("#cancel-subscriber-edit").classList.remove("hidden");
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function resetSubscriberForm() {
+  const form = $("#subscriber-form");
+  form.reset();
+  form.subscriberId.value = "";
+  form.startDate.value = new Date().toISOString().slice(0, 10);
+  $("#subscriber-form-title").textContent = "Agregar abonado";
+  $("#cancel-subscriber-edit").classList.add("hidden");
+}
+
+async function changeSubscriberStatus(id, status) {
+  let reason = "";
+  if (status === "suspended") {
+    reason = prompt("Indicá el motivo de la suspensión:") ?? "";
+    if (!reason.trim()) return;
+  }
+  if (status === "inactive" && !confirm("¿Dar de baja este abonado? Su historial se conservará.")) return;
+  try {
+    await request(`/api/subscribers/${id}/status`, { method: "POST", body: JSON.stringify({ status, reason }) });
+    toast(status === "active" ? "Abonado reactivado." : status === "suspended" ? "Abonado suspendido." : "Abonado dado de baja.");
+    await loadAll();
+  } catch (error) { toast(error.message, true); }
 }
 
 function renderTickets() {
@@ -231,7 +298,7 @@ $("#login-form").onsubmit = async (event) => {
   const data = Object.fromEntries(new FormData(event.currentTarget));
   try {
     const result = await request("/api/login", { method: "POST", body: JSON.stringify(data) });
-    state.user = result.user; showApp(); await loadAll();
+    state.user = result.user; showApp(); resetSubscriberForm(); await loadAll();
   } catch (error) { $("#login-error").textContent = error.message; }
 };
 
@@ -245,6 +312,22 @@ $("#create-user-form").onsubmit = async (event) => {
     form.reset(); toast("Empleado creado correctamente."); await loadAll();
   } catch (error) { toast(error.message, true); }
 };
+$("#subscriber-form").onsubmit = async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const raw = Object.fromEntries(new FormData(form));
+  const id = raw.subscriberId;
+  const payload = {
+    fullName: raw.fullName, document: raw.document, phone: raw.phone, email: raw.email,
+    plan: raw.plan, categoryId: Number(raw.categoryId), startDate: raw.startDate,
+    plates: raw.plates.split(/[\s,;]+/).filter(Boolean)
+  };
+  try {
+    await request(id ? `/api/subscribers/${id}` : "/api/subscribers", { method: id ? "PATCH" : "POST", body: JSON.stringify(payload) });
+    resetSubscriberForm(); toast(id ? "Abonado actualizado." : "Abonado creado correctamente."); await loadAll();
+  } catch (error) { toast(error.message, true); }
+};
+$("#cancel-subscriber-edit").onclick = resetSubscriberForm;
 $("#refresh").onclick = () => loadAll().catch((error) => toast(error.message, true));
 $("#backup-now").onclick = async () => {
   try { await request("/api/backups", { method: "POST", body: "{}" }); toast("Respaldo creado y verificado."); await loadAll(); }
@@ -292,9 +375,9 @@ $$('.nav-item').forEach((button) => button.onclick = () => {
   $$('.nav-item').forEach((item) => item.classList.toggle("active", item === button));
   $$('.page-view').forEach((view) => view.classList.add("hidden"));
   $(`#${button.dataset.view}-view`).classList.remove("hidden");
-  $("#page-title").textContent = ({ rates: "Configuración de tarifas", users: "Empleados y usuarios", operation: "Movimiento del día" })[button.dataset.view];
+  $("#page-title").textContent = ({ rates: "Configuración de tarifas", users: "Empleados y usuarios", subscribers: "Abonados mensuales", operation: "Movimiento del día" })[button.dataset.view];
 });
 
 request("/api/session").then(async ({ user }) => {
-  state.user = user; showApp(); await loadAll();
+  state.user = user; showApp(); resetSubscriberForm(); await loadAll();
 }).catch(() => {});

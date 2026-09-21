@@ -77,6 +77,26 @@ function validatePassword(password) {
   return String(password);
 }
 
+function subscriberPayload(body) {
+  const fullName = String(body.fullName || "").trim();
+  const document = String(body.document || "").trim();
+  const phone = String(body.phone || "").trim();
+  const email = String(body.email || "").trim();
+  const plan = String(body.plan || "");
+  const categoryId = Number(body.categoryId);
+  const startDate = String(body.startDate || "");
+  const plates = [...new Set((Array.isArray(body.plates) ? body.plates : [])
+    .map(normalizePlate).filter(Boolean))];
+  if (fullName.length < 3) throw new Error("Ingrese el nombre completo del abonado.");
+  if (!new Set(["full", "day"]).has(plan)) throw new Error("Plan de abono inválido.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) throw new Error("Ingrese una fecha de alta válida.");
+  if (plates.length === 0) throw new Error("Ingrese al menos una patente.");
+  if (plates.some((plate) => plate.length < 5 || plate.length > 9)) throw new Error("Revise las patentes ingresadas.");
+  const category = db.prepare("SELECT id FROM categories WHERE id = ? AND active = 1").get(categoryId);
+  if (!category) throw new Error("Categoría inválida.");
+  return { fullName, document, phone, email, plan, categoryId, startDate, plates };
+}
+
 async function api(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/login") {
     const body = await readBody(req);
@@ -167,6 +187,92 @@ async function api(req, res, url) {
     const password = validatePassword(body.password);
     db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(password), targetId);
     audit(user.id, "reset_password", "user", targetId, { username: target.username });
+    json(res, 200, { ok: true }); return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/subscribers") {
+    const rows = db.prepare(`
+      SELECT s.id, s.full_name, s.document, s.phone, s.email, s.status, s.suspension_reason,
+        s.created_at, sub.plan, sub.category_id, sub.start_date, sub.spaces, c.name category_name,
+        COALESCE(GROUP_CONCAT(p.plate, ', '), '') plates
+      FROM subscribers s
+      JOIN subscriptions sub ON sub.subscriber_id = s.id
+      JOIN categories c ON c.id = sub.category_id
+      LEFT JOIN subscriber_plates p ON p.subscriber_id = s.id AND p.active = 1
+      GROUP BY s.id ORDER BY s.status = 'active' DESC, s.full_name COLLATE NOCASE
+    `).all();
+    json(res, 200, { subscribers: rows.map((row) => ({ ...row, plates: row.plates ? row.plates.split(", ") : [] })) }); return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/subscribers") {
+    if (!requireUser(req, res, ["admin"])) return;
+    const values = subscriberPayload(await readBody(req));
+    const timestamp = nowIso();
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const result = db.prepare(`
+        INSERT INTO subscribers (full_name, document, phone, email, created_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(values.fullName, values.document || null, values.phone || null, values.email || null, user.id, timestamp, timestamp);
+      const subscriberId = Number(result.lastInsertRowid);
+      db.prepare(`
+        INSERT INTO subscriptions (subscriber_id, plan, category_id, start_date, spaces, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 1, ?, ?)
+      `).run(subscriberId, values.plan, values.categoryId, values.startDate, timestamp, timestamp);
+      const insertPlate = db.prepare("INSERT INTO subscriber_plates (subscriber_id, plate, created_at) VALUES (?, ?, ?)");
+      for (const plate of values.plates) insertPlate.run(subscriberId, plate, timestamp);
+      audit(user.id, "create", "subscriber", subscriberId, values);
+      db.exec("COMMIT");
+      json(res, 201, { id: subscriberId });
+    } catch (error) {
+      db.exec("ROLLBACK");
+      if (String(error.message).includes("subscriber_plates.plate")) throw new Error("Una de las patentes ya pertenece a otro abonado.");
+      throw error;
+    }
+    return;
+  }
+
+  const subscriberMatch = url.pathname.match(/^\/api\/subscribers\/(\d+)$/);
+  if (req.method === "PATCH" && subscriberMatch) {
+    if (!requireUser(req, res, ["admin"])) return;
+    const subscriberId = Number(subscriberMatch[1]);
+    if (!db.prepare("SELECT id FROM subscribers WHERE id = ?").get(subscriberId)) throw new Error("Abonado no encontrado.");
+    const values = subscriberPayload(await readBody(req));
+    const timestamp = nowIso();
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      db.prepare(`UPDATE subscribers SET full_name=?, document=?, phone=?, email=?, updated_at=? WHERE id=?`)
+        .run(values.fullName, values.document || null, values.phone || null, values.email || null, timestamp, subscriberId);
+      db.prepare(`UPDATE subscriptions SET plan=?, category_id=?, start_date=?, updated_at=? WHERE subscriber_id=?`)
+        .run(values.plan, values.categoryId, values.startDate, timestamp, subscriberId);
+      db.prepare("DELETE FROM subscriber_plates WHERE subscriber_id = ?").run(subscriberId);
+      const insertPlate = db.prepare("INSERT INTO subscriber_plates (subscriber_id, plate, created_at) VALUES (?, ?, ?)");
+      for (const plate of values.plates) insertPlate.run(subscriberId, plate, timestamp);
+      audit(user.id, "update", "subscriber", subscriberId, values);
+      db.exec("COMMIT");
+      json(res, 200, { ok: true });
+    } catch (error) {
+      db.exec("ROLLBACK");
+      if (String(error.message).includes("subscriber_plates.plate")) throw new Error("Una de las patentes ya pertenece a otro abonado.");
+      throw error;
+    }
+    return;
+  }
+
+  const subscriberStatusMatch = url.pathname.match(/^\/api\/subscribers\/(\d+)\/status$/);
+  if (req.method === "POST" && subscriberStatusMatch) {
+    if (!requireUser(req, res, ["admin", "coordinator"])) return;
+    const subscriberId = Number(subscriberStatusMatch[1]);
+    const body = await readBody(req);
+    const status = String(body.status || "");
+    const reason = String(body.reason || "").trim();
+    if (!new Set(["active", "suspended", "inactive"]).has(status)) throw new Error("Estado inválido.");
+    if (status === "inactive" && user.role !== "admin") throw new Error("Solo el administrador puede dar de baja un abonado.");
+    if (status === "suspended" && !reason) throw new Error("Debe indicar el motivo de la suspensión.");
+    const result = db.prepare("UPDATE subscribers SET status=?, suspension_reason=?, updated_at=? WHERE id=?")
+      .run(status, status === "suspended" ? reason : null, nowIso(), subscriberId);
+    if (result.changes === 0) throw new Error("Abonado no encontrado.");
+    audit(user.id, "change_status", "subscriber", subscriberId, { status, reason });
     json(res, 200, { ok: true }); return;
   }
 

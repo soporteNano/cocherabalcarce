@@ -61,6 +61,17 @@ h3 { font-size: 19px; }
 .panel { padding: 21px; margin-bottom: 16px; }
 .work-grid { display: grid; grid-template-columns: minmax(260px, .75fr) minmax(540px, 1.7fr); gap: 16px; align-items: start; }
 .admin-grid { display: grid; grid-template-columns: minmax(280px, .7fr) minmax(620px, 1.8fr); gap: 16px; align-items: start; }
+.compact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.compact-grid label { min-width: 0; }
+.subscribers-list { min-width: 0; }
+.subscriber-contact { display: grid; }
+.subscriber-contact small { color: var(--muted); }
+.plate-tags { display: flex; flex-wrap: wrap; gap: 5px; max-width: 230px; }
+.plate-tag { padding: 3px 7px; border-radius: 6px; background: #edf0e9; font-size: 12px; font-weight: 800; letter-spacing: .04em; }
+.state-badge { display: inline-flex; padding: 5px 8px; border-radius: 99px; font-size: 11px; font-weight: 800; }
+.state-active { background: #ddf2e7; color: var(--green); }
+.state-suspended { background: #f8e4bb; color: #795515; }
+.state-inactive { background: #e8e8e5; color: var(--muted); }
 .plate-input { font-size: 22px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .table-wrap { overflow-x: auto; margin-top: 16px; }
 table { width: 100%; border-collapse: collapse; }
@@ -113,4 +124,5 @@ dialog::backdrop { background: rgba(13,28,21,.52); backdrop-filter: blur(3px); }
   .nav-item { padding: 10px; }
   .topbar { align-items: flex-start; }
   .rate-card .rate-fields { grid-template-columns: 1fr; }
+  .compact-grid { grid-template-columns: 1fr; gap: 0; }
 }

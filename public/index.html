@@ -25,6 +25,7 @@
       <div class="brand"><span class="brand-mark small">CB</span><div><strong>Cochera</strong><small>Balcarce</small></div></div>
       <nav>
         <button class="nav-item active" data-view="operation">Operación</button>
+        <button class="nav-item" data-view="subscribers">Abonados</button>
         <button class="nav-item" data-view="users" data-admin>Empleados y usuarios</button>
         <button class="nav-item" data-view="rates" data-admin>Tarifas</button>
       </nav>
@@ -64,6 +65,31 @@
                 <tbody id="tickets-body"></tbody>
               </table>
               <p id="empty-tickets" class="empty">No hay vehículos dentro.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="subscribers-view" class="page-view hidden">
+        <div class="admin-grid">
+          <section class="panel" data-admin>
+            <div class="section-heading"><div><p class="eyebrow">Abono mensual</p><h3 id="subscriber-form-title">Agregar abonado</h3></div></div>
+            <form id="subscriber-form">
+              <input type="hidden" name="subscriberId">
+              <label>Nombre completo<input name="fullName" required minlength="3"></label>
+              <div class="compact-grid"><label>DNI / CUIT<input name="document"></label><label>Teléfono<input name="phone"></label></div>
+              <label>Correo electrónico<input name="email" type="email"></label>
+              <div class="compact-grid"><label>Plan<select name="plan"><option value="full">Mensual completo</option><option value="day">Mensual diurno</option></select></label><label>Categoría<select name="categoryId" id="subscriber-category" required></select></label></div>
+              <label>Fecha de alta<input name="startDate" type="date" required></label>
+              <label>Patentes autorizadas<textarea name="plates" rows="3" placeholder="AA123BB, AC456DE" required></textarea><small>Separar varias patentes con comas o espacios.</small></label>
+              <div class="dialog-actions"><button id="cancel-subscriber-edit" type="button" class="secondary hidden">Cancelar</button><button class="primary" type="submit">Guardar abonado</button></div>
+            </form>
+          </section>
+          <section class="panel subscribers-list">
+            <div class="section-heading"><div><p class="eyebrow">Clientes mensuales</p><h3>Abonados registrados</h3></div></div>
+            <div class="table-wrap">
+              <table><thead><tr><th>Abonado</th><th>Plan</th><th>Patentes</th><th>Estado</th><th></th></tr></thead><tbody id="subscribers-body"></tbody></table>
+              <p id="empty-subscribers" class="empty">Todavía no hay abonados registrados.</p>
             </div>
           </section>
         </div>

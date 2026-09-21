@@ -57,6 +57,8 @@ npm test
 
 - Inicio de sesión y perfiles base.
 - ABM de empleados y usuarios: alta, roles, activación, desactivación y restablecimiento de contraseña.
+- ABM de abonados mensuales con datos de contacto, plan, categoría, fecha de alta y múltiples patentes.
+- Suspensión y reactivación de abonados por administradores y coordinadores, con motivo auditado.
 - Apertura y cierre de turnos.
 - Comprobante imprimible de cierre con movimientos, arqueo y vehículos que permanecen dentro por categoría.
 - Registro de ingresos por patente y categoría.
@@ -67,4 +69,4 @@ npm test
 - Auditoría de las operaciones principales.
 - Respaldo local automático semanal, verificado y con conservación de 12 copias.
 
-Los módulos de abonados, sincronización con n8n y facturación ARCA se incorporarán en las siguientes iteraciones.
+Los módulos de cobro mensual de abonos, sincronización con n8n y facturación ARCA se incorporarán en las siguientes iteraciones.

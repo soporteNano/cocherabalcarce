@@ -30,6 +30,38 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS subscribers (
+    id INTEGER PRIMARY KEY,
+    full_name TEXT NOT NULL,
+    document TEXT,
+    phone TEXT,
+    email TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'suspended', 'inactive')),
+    suspension_reason TEXT,
+    created_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS subscriptions (
+    id INTEGER PRIMARY KEY,
+    subscriber_id INTEGER NOT NULL UNIQUE REFERENCES subscribers(id),
+    plan TEXT NOT NULL CHECK(plan IN ('full', 'day')),
+    category_id INTEGER NOT NULL REFERENCES categories(id),
+    start_date TEXT NOT NULL,
+    spaces INTEGER NOT NULL DEFAULT 1 CHECK(spaces > 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS subscriber_plates (
+    id INTEGER PRIMARY KEY,
+    subscriber_id INTEGER NOT NULL REFERENCES subscribers(id),
+    plate TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS tariffs (
     id INTEGER PRIMARY KEY,
     category_id INTEGER NOT NULL REFERENCES categories(id),
