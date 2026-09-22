@@ -26,8 +26,20 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    capacity_group TEXT NOT NULL DEFAULT 'car' CHECK(capacity_group IN ('car', 'motorcycle')),
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS capacity_sectors (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    capacity_group TEXT NOT NULL CHECK(capacity_group IN ('car', 'motorcycle')),
+    purpose TEXT NOT NULL DEFAULT 'casual' CHECK(purpose IN ('casual', 'subscriber', 'mixed')),
+    capacity INTEGER NOT NULL CHECK(capacity >= 0),
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
   CREATE TABLE IF NOT EXISTS subscribers (
@@ -106,6 +118,8 @@ db.exec(`
     suggested_cents INTEGER,
     charged_cents INTEGER,
     exception_reason TEXT,
+    capacity_override INTEGER NOT NULL DEFAULT 0,
+    capacity_reason TEXT,
     status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'closed', 'cancelled')),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
@@ -146,6 +160,19 @@ if (!shiftColumns.includes("close_report_json")) {
   db.exec("ALTER TABLE shifts ADD COLUMN close_report_json TEXT");
 }
 
+const categoryColumns = db.prepare("PRAGMA table_info(categories)").all().map((column) => column.name);
+if (!categoryColumns.includes("capacity_group")) {
+  db.exec("ALTER TABLE categories ADD COLUMN capacity_group TEXT NOT NULL DEFAULT 'car'");
+}
+
+const ticketColumns = db.prepare("PRAGMA table_info(tickets)").all().map((column) => column.name);
+if (!ticketColumns.includes("capacity_override")) {
+  db.exec("ALTER TABLE tickets ADD COLUMN capacity_override INTEGER NOT NULL DEFAULT 0");
+}
+if (!ticketColumns.includes("capacity_reason")) {
+  db.exec("ALTER TABLE tickets ADD COLUMN capacity_reason TEXT");
+}
+
 const userCount = db.prepare("SELECT COUNT(*) count FROM users").get().count;
 if (userCount === 0) {
   const initialPassword = process.env.COCHERA_ADMIN_PASSWORD || "Cambiar123!";
@@ -157,6 +184,7 @@ if (userCount === 0) {
 
 const insertCategory = db.prepare("INSERT OR IGNORE INTO categories (name) VALUES (?)");
 for (const name of ["Auto", "Camioneta", "Moto"]) insertCategory.run(name);
+db.prepare("UPDATE categories SET capacity_group = 'motorcycle' WHERE name = 'Moto' COLLATE NOCASE").run();
 
 const insertMethod = db.prepare("INSERT OR IGNORE INTO payment_methods (name, kind) VALUES (?, ?)");
 for (const [name, kind] of [

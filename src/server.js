@@ -54,6 +54,22 @@ function openShift() {
   `).get();
 }
 
+function capacitySnapshot() {
+  const result = {};
+  for (const group of ["car", "motorcycle"]) {
+    const capacity = db.prepare(`
+      SELECT COALESCE(SUM(capacity), 0) total FROM capacity_sectors
+      WHERE active = 1 AND capacity_group = ? AND purpose IN ('casual', 'mixed')
+    `).get(group).total;
+    const occupied = db.prepare(`
+      SELECT COUNT(*) total FROM tickets t JOIN categories c ON c.id = t.category_id
+      WHERE t.status = 'open' AND c.capacity_group = ?
+    `).get(group).total;
+    result[group] = { capacity, occupied, available: Math.max(0, capacity - occupied), overCapacity: Math.max(0, occupied - capacity) };
+  }
+  return result;
+}
+
 function normalizePlate(value) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -284,7 +300,7 @@ async function api(req, res, url) {
         COALESCE(SUM(CASE WHEN status = 'closed' AND date(exit_at, 'localtime') = date('now', 'localtime') THEN charged_cents ELSE 0 END), 0) charged_today
       FROM tickets
     `).get();
-    json(res, 200, { ...counts, shift: openShift(), databasePath, backup: backupStatus() }); return;
+    json(res, 200, { ...counts, shift: openShift(), databasePath, backup: backupStatus(), capacity: capacitySnapshot() }); return;
   }
 
   if (req.method === "POST" && url.pathname === "/api/backups") {
@@ -308,7 +324,7 @@ async function api(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/categories/all") {
     if (!requireUser(req, res, ["admin"])) return;
     const rows = db.prepare(`
-      SELECT c.id, c.name, c.active, c.created_at,
+      SELECT c.id, c.name, c.capacity_group, c.active, c.created_at,
         (SELECT COUNT(*) FROM tickets t WHERE t.category_id = c.id) ticket_count,
         (SELECT COUNT(*) FROM subscriptions s WHERE s.category_id = c.id) subscriber_count
       FROM categories c ORDER BY c.active DESC, c.name COLLATE NOCASE
@@ -320,10 +336,11 @@ async function api(req, res, url) {
     if (!requireUser(req, res, ["admin"])) return;
     const body = await readBody(req);
     const name = String(body.name || "").trim();
+    const capacityGroup = new Set(["car", "motorcycle"]).has(body.capacityGroup) ? body.capacityGroup : "car";
     if (name.length < 2) throw new Error("Ingrese un nombre de categoría.");
     try {
-      const result = db.prepare("INSERT INTO categories (name) VALUES (?)").run(name);
-      audit(user.id, "create", "category", result.lastInsertRowid, { name });
+      const result = db.prepare("INSERT INTO categories (name, capacity_group) VALUES (?, ?)").run(name, capacityGroup);
+      audit(user.id, "create", "category", result.lastInsertRowid, { name, capacityGroup });
       json(res, 201, { id: Number(result.lastInsertRowid), name });
     } catch (error) {
       if (String(error.message).includes("UNIQUE")) throw new Error("Ya existe una categoría con ese nombre.");
@@ -339,14 +356,68 @@ async function api(req, res, url) {
     const body = await readBody(req);
     const name = String(body.name || "").trim();
     const active = body.active ? 1 : 0;
+    const capacityGroup = String(body.capacityGroup || "");
     if (name.length < 2) throw new Error("Ingrese un nombre de categoría.");
+    if (!new Set(["car", "motorcycle"]).has(capacityGroup)) throw new Error("Grupo de capacidad inválido.");
     if (!db.prepare("SELECT id FROM categories WHERE id = ?").get(categoryId)) throw new Error("Categoría no encontrada.");
     try {
-      db.prepare("UPDATE categories SET name = ?, active = ? WHERE id = ?").run(name, active, categoryId);
-      audit(user.id, "update", "category", categoryId, { name, active: Boolean(active) });
+      db.prepare("UPDATE categories SET name = ?, capacity_group = ?, active = ? WHERE id = ?").run(name, capacityGroup, active, categoryId);
+      audit(user.id, "update", "category", categoryId, { name, capacityGroup, active: Boolean(active) });
       json(res, 200, { ok: true });
     } catch (error) {
       if (String(error.message).includes("UNIQUE")) throw new Error("Ya existe una categoría con ese nombre.");
+      throw error;
+    }
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/capacity-sectors") {
+    if (!requireUser(req, res, ["admin"])) return;
+    json(res, 200, { sectors: db.prepare("SELECT * FROM capacity_sectors ORDER BY active DESC, capacity_group, name COLLATE NOCASE").all() }); return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/capacity-sectors") {
+    if (!requireUser(req, res, ["admin"])) return;
+    const body = await readBody(req);
+    const name = String(body.name || "").trim();
+    const capacityGroup = String(body.capacityGroup || "");
+    const purpose = String(body.purpose || "");
+    const capacity = Number(body.capacity);
+    if (name.length < 2) throw new Error("Ingrese el nombre del piso o sector.");
+    if (!new Set(["car", "motorcycle"]).has(capacityGroup)) throw new Error("Grupo de capacidad inválido.");
+    if (!new Set(["casual", "subscriber", "mixed"]).has(purpose)) throw new Error("Destino de sector inválido.");
+    if (!Number.isInteger(capacity) || capacity < 0) throw new Error("La capacidad debe ser un número entero positivo.");
+    try {
+      const result = db.prepare(`INSERT INTO capacity_sectors (name, capacity_group, purpose, capacity, updated_at) VALUES (?, ?, ?, ?, ?)`)
+        .run(name, capacityGroup, purpose, capacity, nowIso());
+      audit(user.id, "create", "capacity_sector", result.lastInsertRowid, { name, capacityGroup, purpose, capacity });
+      json(res, 201, { id: Number(result.lastInsertRowid) });
+    } catch (error) {
+      if (String(error.message).includes("UNIQUE")) throw new Error("Ya existe un piso o sector con ese nombre.");
+      throw error;
+    }
+    return;
+  }
+
+  const sectorMatch = url.pathname.match(/^\/api\/capacity-sectors\/(\d+)$/);
+  if (req.method === "PATCH" && sectorMatch) {
+    if (!requireUser(req, res, ["admin"])) return;
+    const body = await readBody(req);
+    const sectorId = Number(sectorMatch[1]);
+    const name = String(body.name || "").trim();
+    const capacityGroup = String(body.capacityGroup || "");
+    const purpose = String(body.purpose || "");
+    const capacity = Number(body.capacity);
+    const active = body.active ? 1 : 0;
+    if (name.length < 2 || !new Set(["car", "motorcycle"]).has(capacityGroup) || !new Set(["casual", "subscriber", "mixed"]).has(purpose) || !Number.isInteger(capacity) || capacity < 0) throw new Error("Revise los datos del sector.");
+    try {
+      const result = db.prepare(`UPDATE capacity_sectors SET name=?, capacity_group=?, purpose=?, capacity=?, active=?, updated_at=? WHERE id=?`)
+        .run(name, capacityGroup, purpose, capacity, active, nowIso(), sectorId);
+      if (result.changes === 0) throw new Error("Sector no encontrado.");
+      audit(user.id, "update", "capacity_sector", sectorId, { name, capacityGroup, purpose, capacity, active: Boolean(active) });
+      json(res, 200, { ok: true });
+    } catch (error) {
+      if (String(error.message).includes("UNIQUE")) throw new Error("Ya existe un piso o sector con ese nombre.");
       throw error;
     }
     return;
@@ -454,14 +525,19 @@ async function api(req, res, url) {
     const body = await readBody(req);
     const plate = normalizePlate(body.plate);
     if (plate.length < 5 || plate.length > 9) throw new Error("Ingrese una patente válida.");
-    const category = db.prepare("SELECT id FROM categories WHERE id = ? AND active = 1").get(Number(body.categoryId));
+    const category = db.prepare("SELECT id, capacity_group FROM categories WHERE id = ? AND active = 1").get(Number(body.categoryId));
     if (!category) throw new Error("Categoría inválida.");
+    const availability = capacitySnapshot()[category.capacity_group];
+    const override = Boolean(body.capacityOverride);
+    const capacityReason = String(body.capacityReason || "").trim();
+    if (availability.capacity > 0 && availability.available <= 0 && !override) throw new Error("No quedan lugares disponibles para esta categoría.");
+    if (override && !capacityReason) throw new Error("Debe indicar el motivo para autorizar el ingreso sin disponibilidad.");
     const publicId = randomUUID();
     const result = db.prepare(`
-      INSERT INTO tickets (public_id, plate, category_id, entry_at, entry_user_id, entry_shift_id)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(publicId, plate, category.id, nowIso(), user.id, shift.id);
-    audit(user.id, "entry", "ticket", result.lastInsertRowid, { plate, categoryId: category.id });
+      INSERT INTO tickets (public_id, plate, category_id, entry_at, entry_user_id, entry_shift_id, capacity_override, capacity_reason)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(publicId, plate, category.id, nowIso(), user.id, shift.id, override ? 1 : 0, override ? capacityReason : null);
+    audit(user.id, "entry", "ticket", result.lastInsertRowid, { plate, categoryId: category.id, capacityOverride: override, capacityReason });
     json(res, 201, { id: Number(result.lastInsertRowid), publicId, plate }); return;
   }
 

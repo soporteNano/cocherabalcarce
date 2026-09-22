@@ -27,6 +27,7 @@
         <button class="nav-item active" data-view="operation">Operación</button>
         <button class="nav-item" data-view="subscribers">Abonados</button>
         <button class="nav-item" data-view="users" data-admin>Empleados y usuarios</button>
+        <button class="nav-item" data-view="capacity" data-admin>Capacidad</button>
         <button class="nav-item" data-view="rates" data-admin>Categorías y tarifas</button>
       </nav>
       <div class="user-box"><strong id="user-name"></strong><span id="user-role"></span><button id="logout" class="link-button">Cerrar sesión</button></div>
@@ -43,6 +44,8 @@
           <article class="stat-card accent"><span>Vehículos dentro</span><strong id="stat-open">0</strong></article>
           <article class="stat-card"><span>Salidas de hoy</span><strong id="stat-exits">0</strong></article>
           <article class="stat-card"><span>Cobrado hoy</span><strong id="stat-charged">$ 0</strong></article>
+          <article class="stat-card capacity-stat"><span>Disponibles autos / camionetas</span><strong id="stat-car-available">Sin configurar</strong></article>
+          <article class="stat-card capacity-stat"><span>Disponibles motos</span><strong id="stat-moto-available">Sin configurar</strong></article>
         </div>
 
         <section id="shift-panel" class="panel"></section>
@@ -53,6 +56,7 @@
             <form id="entry-form">
               <label>Patente<input name="plate" class="plate-input" maxlength="9" placeholder="AA123BB" required></label>
               <label>Categoría<select name="categoryId" id="entry-category" required></select></label>
+              <div id="entry-capacity" class="capacity-highlight"><span>Disponibilidad estimada</span><strong>Sin configurar</strong></div>
               <button class="primary wide" type="submit">Registrar entrada</button>
             </form>
           </section>
@@ -95,6 +99,25 @@
         </div>
       </section>
 
+      <section id="capacity-view" class="page-view hidden">
+        <div class="admin-grid">
+          <section class="panel">
+            <div class="section-heading"><div><p class="eyebrow">Nueva disponibilidad</p><h3>Agregar piso o sector</h3></div></div>
+            <form id="create-sector-form">
+              <label>Nombre<input name="name" placeholder="Ej.: Piso 1" required minlength="2"></label>
+              <label>Cupo para<select name="capacityGroup"><option value="car">Autos y camionetas</option><option value="motorcycle">Motos</option></select></label>
+              <label>Destino<select name="purpose"><option value="casual">Alquiler diario</option><option value="subscriber">Abonados</option><option value="mixed">Uso mixto</option></select></label>
+              <label>Cantidad de lugares<input name="capacity" type="number" min="0" step="1" required></label>
+              <button class="primary wide">Agregar sector</button>
+            </form>
+          </section>
+          <section class="panel">
+            <div class="section-heading"><div><p class="eyebrow">Configuración actual</p><h3>Pisos y sectores</h3></div></div>
+            <div class="table-wrap"><table><thead><tr><th>Sector</th><th>Cupo</th><th>Destino</th><th>Lugares</th><th>Activo</th><th></th></tr></thead><tbody id="sectors-body"></tbody></table><p id="empty-sectors" class="empty">Todavía no hay capacidad configurada.</p></div>
+          </section>
+        </div>
+      </section>
+
       <section id="users-view" class="page-view hidden">
         <div class="admin-grid">
           <section class="panel">
@@ -118,8 +141,8 @@
 
       <section id="rates-view" class="page-view hidden">
         <section class="panel">
-          <div class="section-heading"><div><p class="eyebrow">Tipos de vehículo</p><h3>Categorías</h3></div><form id="create-category-form" class="inline-form"><input name="name" minlength="2" placeholder="Nueva categoría" required><button class="primary">Agregar</button></form></div>
-          <div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Uso histórico</th><th>Disponible</th><th></th></tr></thead><tbody id="categories-admin-body"></tbody></table></div>
+          <div class="section-heading"><div><p class="eyebrow">Tipos de vehículo</p><h3>Categorías</h3></div><form id="create-category-form" class="inline-form"><input name="name" minlength="2" placeholder="Nueva categoría" required><select name="capacityGroup"><option value="car">Auto/camioneta</option><option value="motorcycle">Moto</option></select><button class="primary">Agregar</button></form></div>
+          <div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Cupo</th><th>Uso histórico</th><th>Disponible</th><th></th></tr></thead><tbody id="categories-admin-body"></tbody></table></div>
         </section>
         <section class="panel">
           <div class="section-heading"><div><p class="eyebrow">Protección de datos</p><h3>Respaldo local</h3><p id="backup-status" class="muted">Consultando estado…</p></div><button id="backup-now" class="secondary">Crear respaldo ahora</button></div>

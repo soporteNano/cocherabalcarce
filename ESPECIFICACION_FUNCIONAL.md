@@ -47,7 +47,9 @@ Las categorías iniciales son:
 
 El administrador contará con un ABM para crear, modificar y desactivar categorías. Una categoría utilizada en movimientos anteriores no se eliminará físicamente, para preservar el historial.
 
-No se controlarán límites ni cupos por categoría. El sistema mostrará la cantidad de vehículos que se encuentran dentro, pero no bloqueará ingresos por capacidad.
+La capacidad será configurable por piso o sector. Autos y camionetas compartirán un cupo, mientras que las motos tendrán un cupo separado. Cada sector podrá destinarse a alquiler diario, abonados o uso mixto, y podrá activarse o desactivarse cuando cambie la disponibilidad del edificio.
+
+La pantalla de ingreso mostrará una estimación visible de lugares disponibles para la categoría seleccionada. El cálculo utilizará la capacidad habilitada para alquiler diario menos los vehículos que se encuentren dentro. Cuando el cupo llegue a cero, el empleado recibirá una advertencia y podrá autorizar manualmente el ingreso indicando un motivo, que quedará auditado.
 
 ## Modalidades y tarifas
 

@@ -1,6 +1,6 @@
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [...parent.querySelectorAll(selector)];
-const state = { user: null, categories: [], allCategories: [], methods: [], tickets: [], users: [], subscribers: [], quote: null };
+const state = { user: null, dashboard: null, categories: [], allCategories: [], capacitySectors: [], methods: [], tickets: [], users: [], subscribers: [], quote: null };
 
 const money = (cents = 0) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 2 }).format(cents / 100);
 const dateTime = (value) => new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
@@ -37,18 +37,21 @@ function showApp() {
 }
 
 async function loadAll() {
-  const [dashboard, categories, methods, tickets, subscribers, users, allCategories] = await Promise.all([
+  const [dashboard, categories, methods, tickets, subscribers, users, allCategories, capacitySectors] = await Promise.all([
     request("/api/dashboard"), request("/api/categories"), request("/api/payment-methods"), request("/api/tickets"),
     request("/api/subscribers"),
     state.user.role === "admin" ? request("/api/users") : Promise.resolve({ users: [] }),
-    state.user.role === "admin" ? request("/api/categories/all") : Promise.resolve({ categories: [] })
+    state.user.role === "admin" ? request("/api/categories/all") : Promise.resolve({ categories: [] }),
+    state.user.role === "admin" ? request("/api/capacity-sectors") : Promise.resolve({ sectors: [] })
   ]);
+  state.dashboard = dashboard;
   state.categories = categories.categories;
   state.methods = methods.methods;
   state.tickets = tickets.tickets;
   state.users = users?.users || [];
   state.subscribers = subscribers.subscribers;
   state.allCategories = allCategories.categories;
+  state.capacitySectors = capacitySectors.sectors;
   renderDashboard(dashboard);
   renderCategories();
   renderTickets();
@@ -56,6 +59,7 @@ async function loadAll() {
   renderUsers();
   renderSubscribers();
   renderCategoryAdmin();
+  renderCapacitySectors();
 }
 
 const roleLabel = (role) => ({ employee: "Empleado / cajero", coordinator: "Coordinador", admin: "Administrador" })[role] || role;
@@ -104,6 +108,8 @@ function renderDashboard(data) {
   $("#stat-open").textContent = data.open_count || 0;
   $("#stat-exits").textContent = data.exits_today || 0;
   $("#stat-charged").textContent = money(data.charged_today);
+  $("#stat-car-available").textContent = capacityText(data.capacity.car);
+  $("#stat-moto-available").textContent = capacityText(data.capacity.motorcycle);
   const chip = $("#shift-status");
   const panel = $("#shift-panel");
   if ($("#backup-status")) $("#backup-status").textContent = data.backup.lastBackupAt ? `Última copia: ${dateTime(data.backup.lastBackupAt)} · ${data.backup.copies} copia/s` : "Todavía no se creó ninguna copia.";
@@ -118,11 +124,17 @@ function renderDashboard(data) {
     panel.innerHTML = `<div class="section-heading"><div><p class="eyebrow">Antes de operar</p><h3>Abrir un turno de caja</h3></div><form id="open-shift-form" class="section-heading"><input name="opening" type="number" min="0" step="0.01" placeholder="Efectivo inicial" required><button class="primary">Abrir caja</button></form></div>`;
     $("#open-shift-form").onsubmit = openShift;
   }
+  updateEntryCapacity();
+}
+
+function capacityText(item) {
+  return item.capacity > 0 ? `${item.available} de ${item.capacity}` : "Sin configurar";
 }
 
 function renderCategories() {
   $("#entry-category").innerHTML = state.categories.map((category) => `<option value="${category.id}">${category.name}</option>`).join("");
   $("#subscriber-category").innerHTML = state.categories.map((category) => `<option value="${category.id}">${category.name}</option>`).join("");
+  updateEntryCapacity();
 }
 
 function renderCategoryAdmin() {
@@ -131,6 +143,7 @@ function renderCategoryAdmin() {
   tbody.innerHTML = state.allCategories.map((category) => `
     <tr data-category-id="${category.id}">
       <td><input class="category-name-input" value="${escapeHtml(category.name)}"></td>
+      <td><select class="category-group"><option value="car" ${category.capacity_group === "car" ? "selected" : ""}>Auto/camioneta</option><option value="motorcycle" ${category.capacity_group === "motorcycle" ? "selected" : ""}>Moto</option></select></td>
       <td>${category.ticket_count} ticket/s · ${category.subscriber_count} abonado/s</td>
       <td><label class="status-toggle"><input class="category-active" type="checkbox" ${category.active ? "checked" : ""}> Activa</label></td>
       <td><button type="button" class="secondary save-category">Guardar</button></td>
@@ -143,10 +156,59 @@ async function saveCategory(row) {
   try {
     await request(`/api/categories/${row.dataset.categoryId}`, { method: "PATCH", body: JSON.stringify({
       name: $(".category-name-input", row).value,
+      capacityGroup: $(".category-group", row).value,
       active: $(".category-active", row).checked
     }) });
     toast("Categoría actualizada."); await loadAll();
   } catch (error) { toast(error.message, true); }
+}
+
+function renderCapacitySectors() {
+  const tbody = $("#sectors-body");
+  if (!tbody) return;
+  tbody.innerHTML = state.capacitySectors.map((sector) => `
+    <tr data-sector-id="${sector.id}">
+      <td><input class="sector-name" value="${escapeHtml(sector.name)}"></td>
+      <td><select class="sector-group"><option value="car" ${sector.capacity_group === "car" ? "selected" : ""}>Autos/camionetas</option><option value="motorcycle" ${sector.capacity_group === "motorcycle" ? "selected" : ""}>Motos</option></select></td>
+      <td><select class="sector-purpose"><option value="casual" ${sector.purpose === "casual" ? "selected" : ""}>Alquiler diario</option><option value="subscriber" ${sector.purpose === "subscriber" ? "selected" : ""}>Abonados</option><option value="mixed" ${sector.purpose === "mixed" ? "selected" : ""}>Uso mixto</option></select></td>
+      <td><input class="sector-capacity" type="number" min="0" step="1" value="${sector.capacity}"></td>
+      <td><label class="status-toggle"><input class="sector-active" type="checkbox" ${sector.active ? "checked" : ""}> Activo</label></td>
+      <td><button type="button" class="secondary save-sector">Guardar</button></td>
+    </tr>
+  `).join("");
+  $("#empty-sectors").classList.toggle("hidden", state.capacitySectors.length > 0);
+  $$(".save-sector", tbody).forEach((button) => button.onclick = () => saveSector(button.closest("tr")));
+}
+
+async function saveSector(row) {
+  try {
+    await request(`/api/capacity-sectors/${row.dataset.sectorId}`, { method: "PATCH", body: JSON.stringify({
+      name: $(".sector-name", row).value, capacityGroup: $(".sector-group", row).value,
+      purpose: $(".sector-purpose", row).value, capacity: Number($(".sector-capacity", row).value),
+      active: $(".sector-active", row).checked
+    }) });
+    toast("Capacidad actualizada."); await loadAll();
+  } catch (error) { toast(error.message, true); }
+}
+
+function selectedCapacity() {
+  const categoryId = Number($("#entry-category").value);
+  const category = state.categories.find((item) => item.id === categoryId);
+  return category && state.dashboard ? state.dashboard.capacity[category.capacity_group] : null;
+}
+
+function updateEntryCapacity() {
+  const box = $("#entry-capacity");
+  if (!box) return;
+  const capacity = selectedCapacity();
+  const strong = $("strong", box);
+  if (!capacity || capacity.capacity === 0) {
+    strong.textContent = "Sin límite configurado";
+    box.classList.remove("full");
+    return;
+  }
+  strong.textContent = `${capacity.available} lugares disponibles de ${capacity.capacity}`;
+  box.classList.toggle("full", capacity.available <= 0);
 }
 
 function renderSubscribers() {
@@ -343,8 +405,17 @@ $("#create-category-form").onsubmit = async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   try {
-    await request("/api/categories", { method: "POST", body: JSON.stringify({ name: form.name.value }) });
+    await request("/api/categories", { method: "POST", body: JSON.stringify({ name: form.name.value, capacityGroup: form.capacityGroup.value }) });
     form.reset(); toast("Categoría creada."); await loadAll();
+  } catch (error) { toast(error.message, true); }
+};
+$("#create-sector-form").onsubmit = async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  try {
+    await request("/api/capacity-sectors", { method: "POST", body: JSON.stringify({ ...data, capacity: Number(data.capacity) }) });
+    form.reset(); toast("Piso o sector agregado."); await loadAll();
   } catch (error) { toast(error.message, true); }
 };
 $("#subscriber-form").onsubmit = async (event) => {
@@ -371,11 +442,19 @@ $("#backup-now").onclick = async () => {
 $("#entry-form").onsubmit = async (event) => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.currentTarget));
+  const capacity = selectedCapacity();
+  if (capacity?.capacity > 0 && capacity.available <= 0) {
+    const reason = prompt("No quedan lugares disponibles. Indicá el motivo para autorizar igualmente el ingreso:");
+    if (!reason?.trim()) return;
+    data.capacityOverride = true;
+    data.capacityReason = reason.trim();
+  }
   try {
     await request("/api/tickets", { method: "POST", body: JSON.stringify(data) });
     event.currentTarget.reset(); toast(`Ingreso de ${data.plate.toUpperCase()} registrado.`); await loadAll();
   } catch (error) { toast(error.message, true); }
 };
+$("#entry-category").onchange = updateEntryCapacity;
 
 $("#charge-form").mode.onchange = updateQuote;
 $("#charge-form").onsubmit = async (event) => {
@@ -410,7 +489,7 @@ $$('.nav-item').forEach((button) => button.onclick = () => {
   $$('.nav-item').forEach((item) => item.classList.toggle("active", item === button));
   $$('.page-view').forEach((view) => view.classList.add("hidden"));
   $(`#${button.dataset.view}-view`).classList.remove("hidden");
-  $("#page-title").textContent = ({ rates: "Categorías y tarifas", users: "Empleados y usuarios", subscribers: "Abonados mensuales", operation: "Movimiento del día" })[button.dataset.view];
+  $("#page-title").textContent = ({ rates: "Categorías y tarifas", capacity: "Capacidad de la cochera", users: "Empleados y usuarios", subscribers: "Abonados mensuales", operation: "Movimiento del día" })[button.dataset.view];
 });
 
 request("/api/session").then(async ({ user }) => {
