@@ -127,7 +127,7 @@ Cada entrada registrará como mínimo:
 
 La salida registrará la fecha y hora, el tiempo transcurrido, el cálculo sugerido, las excepciones, el importe final, los medios de pago y el turno de caja.
 
-Cada ticket conservará la condición fiscal del cliente. El valor inicial será Consumidor final y el empleado podrá modificarlo al cobrar. Para otras condiciones el empleado ingresará el CUIT y el sistema consultará la razón social en el servicio Padrón Constancia de Inscripción de ARCA; el nombre obtenido no se ingresará manualmente. Si el cliente solicita factura electrónica, se creará una solicitud pendiente vinculada al ticket, sin alterar el cobro ya registrado.
+Cada ticket conservará la condición fiscal del cliente. El valor inicial será Consumidor final y el empleado podrá modificarlo al cobrar. Para otras condiciones el empleado ingresará el CUIT y el sistema consultará la razón social en Padrón A13 de ARCA; el nombre obtenido no se ingresará manualmente. Si el cliente solicita factura electrónica, se creará una solicitud pendiente vinculada al ticket, sin alterar el cobro ya registrado.
 
 Los vehículos que permanezcan dentro durante un cambio de turno conservarán su entrada original. El cobro se asociará al turno en el que se registre el pago.
 

@@ -4,13 +4,16 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes, randomUUID } from "node:crypto";
 import { networkInterfaces } from "node:os";
+import { loadEnvFile } from "node:process";
 import { db, audit, activeTariff, nowIso, databasePath } from "./db.js";
 import { hashPassword, verifyPassword } from "./security.js";
 import { calculateSuggestedAmount, elapsedMinutes } from "./pricing.js";
 import { backupStatus, runBackup, startBackupScheduler } from "./backup.js";
-import { arcaLookupConfigured, isValidCuit, lookupTaxpayer, normalizeCuit } from "./arca.js";
+import { arcaBillingConfigured, arcaLookupConfigured, emitTicketInvoice, isValidCuit, lookupTaxpayer, normalizeCuit } from "./arca.js";
 
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "..");
+const envPath = join(root, ".env");
+if (existsSync(envPath)) loadEnvFile(envPath);
 const publicDir = join(root, "public");
 const port = Number(process.env.PORT || 3210);
 const host = process.env.HOST || "0.0.0.0";
@@ -466,7 +469,8 @@ async function api(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/tax-conditions") {
     json(res, 200, {
       conditions: db.prepare("SELECT id, name FROM tax_conditions WHERE active = 1 ORDER BY CASE WHEN id = 5 THEN 0 ELSE 1 END, name").all(),
-      arcaLookupConfigured: arcaLookupConfigured()
+      arcaLookupConfigured: arcaLookupConfigured(),
+      arcaBillingConfigured: arcaBillingConfigured()
     }); return;
   }
 
@@ -495,6 +499,40 @@ async function api(req, res, url) {
       ORDER BY i.requested_at DESC
     `).all();
     json(res, 200, { invoices }); return;
+  }
+
+  const authorizeInvoiceMatch = url.pathname.match(/^\/api\/invoices\/(\d+)\/authorize$/);
+  if (req.method === "POST" && authorizeInvoiceMatch) {
+    if (!requireUser(req, res, ["admin", "coordinator", "employee"])) return;
+    const invoiceId = Number(authorizeInvoiceMatch[1]);
+    const invoice = db.prepare(`
+      SELECT i.*, t.charged_cents FROM invoices i JOIN tickets t ON t.id = i.ticket_id WHERE i.id = ?
+    `).get(invoiceId);
+    if (!invoice) throw new Error("Solicitud de factura no encontrada.");
+    if (invoice.status === "authorized") throw new Error("La factura ya fue autorizada por ARCA.");
+    if (!new Set(["pending", "error"]).has(invoice.status)) throw new Error("La factura no se encuentra disponible para emitir.");
+    const claimed = db.prepare("UPDATE invoices SET status='authorizing', error_message=NULL WHERE id=? AND status IN ('pending','error')").run(invoiceId);
+    if (claimed.changes !== 1) throw new Error("La factura está siendo procesada por otro usuario.");
+    try {
+      const result = await emitTicketInvoice({
+        amountCents: invoice.charged_cents,
+        taxConditionId: invoice.tax_condition_id,
+        docType: invoice.doc_type,
+        docNumber: invoice.doc_number
+      });
+      const authorizedAt = nowIso();
+      db.prepare(`UPDATE invoices SET status='authorized', voucher_type=?, point_of_sale=?, voucher_number=?,
+        cae=?, cae_expiration=?, arca_response_json=?, authorized_at=? WHERE id=?`)
+        .run(result.voucherType, result.pointOfSale, result.voucherNumber, result.cae, result.caeExpiration,
+          JSON.stringify(result.raw), authorizedAt, invoiceId);
+      audit(user.id, "authorize", "invoice", invoiceId, { voucherType: result.voucherType, pointOfSale: result.pointOfSale, voucherNumber: result.voucherNumber, cae: result.cae });
+      json(res, 200, { invoiceId, status: "authorized", ...result, raw: undefined, authorizedAt }); return;
+    } catch (error) {
+      const status = String(error.message).includes("rechazó") ? "rejected" : "error";
+      db.prepare("UPDATE invoices SET status=?, error_message=? WHERE id=?").run(status, String(error.message), invoiceId);
+      audit(user.id, "arca_error", "invoice", invoiceId, { status, error: String(error.message) });
+      throw error;
+    }
   }
 
   if (req.method === "POST" && url.pathname === "/api/shifts/open") {

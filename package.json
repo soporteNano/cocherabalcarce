@@ -5,11 +5,15 @@
   "type": "module",
   "description": "Sistema local de gestión de cochera",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
+    "start": "cross-env NODE_OPTIONS=\"--tls-cipher-list=TLS_RSA_WITH_AES_256_GCM_SHA384 --tls-max-v1.2\" node src/server.js",
+    "dev": "cross-env NODE_OPTIONS=\"--tls-cipher-list=TLS_RSA_WITH_AES_256_GCM_SHA384 --tls-max-v1.2\" node --watch src/server.js",
     "test": "node --test"
   },
   "engines": {
     "node": ">=24"
+  },
+  "dependencies": {
+    "@arcasdk/core": "^2.0.0",
+    "cross-env": "^7.0.3"
   }
 }

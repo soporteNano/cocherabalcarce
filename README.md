@@ -7,13 +7,14 @@ Primera versión de la aplicación local para controlar ingresos, salidas, tarif
 - Windows 10/11 o una distribución Linux moderna de 64 bits.
 - Node.js 24 o posterior.
 
-No requiere instalar paquetes adicionales.
+Después de descargar o clonar el proyecto por primera vez, ejecutar `npm install` para instalar sus componentes.
 
 ## Inicio
 
 Desde PowerShell, dentro de la carpeta del proyecto:
 
 ```powershell
+npm install
 npm start
 ```
 
@@ -55,6 +56,12 @@ La base se crea automáticamente en `data/cochera.sqlite`. Esta carpeta está ex
 
 Antes de cobrar un ticket, el administrador debe cargar las tarifas. Por la regla comercial definida, toda tarifa nueva comienza a regir al día siguiente.
 
+## Configuración de ARCA
+
+La configuración local se guarda en `.env`, archivo excluido de GitHub. `.env.example` contiene las opciones necesarias: CUIT emisor, ambiente, certificado, clave privada, punto de venta y tipo de comprobante. Los certificados nunca deben subirse al repositorio.
+
+La emisión se realiza únicamente cuando un empleado confirma **Emitir en ARCA** desde la bandeja Facturación. El sistema conserva el CAE y muestra los rechazos o errores informados por el organismo.
+
 ## Pruebas
 
 ```powershell
@@ -71,8 +78,8 @@ npm test
 - Capacidad configurable por piso o sector, con cupos separados para autos/camionetas y motos.
 - Disponibilidad estimada durante el ingreso y autorización auditada cuando el cupo está completo.
 - Condición fiscal del cliente en cada ticket, con Consumidor final como valor predeterminado.
-- Registro de solicitudes de factura electrónica pendientes de autorización ante ARCA.
-- Consulta de razón social por CUIT mediante el servicio Padrón Constancia de Inscripción de ARCA. La interfaz queda disponible y requiere certificado, autorización y credenciales WSAA para efectuar consultas reales.
+- Registro y autorización de solicitudes de factura electrónica ante ARCA, con CAE, punto de venta y número de comprobante.
+- Consulta en vivo de razón social por CUIT mediante Padrón A13 de ARCA.
 - Suspensión y reactivación de abonados por administradores y coordinadores, con motivo auditado.
 - Apertura y cierre de turnos.
 - Comprobante imprimible de cierre con movimientos, arqueo y vehículos que permanecen dentro por categoría.
@@ -84,4 +91,4 @@ npm test
 - Auditoría de las operaciones principales.
 - Respaldo local automático semanal, verificado y con conservación de 12 copias.
 
-Los módulos de cobro mensual de abonos, sincronización con n8n y facturación ARCA se incorporarán en las siguientes iteraciones.
+Los módulos de cobro mensual de abonos, sincronización con n8n y comprobante térmico de 80 mm se incorporarán en las siguientes iteraciones.

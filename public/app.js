@@ -1,6 +1,6 @@
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [...parent.querySelectorAll(selector)];
-const state = { user: null, dashboard: null, categories: [], allCategories: [], capacitySectors: [], methods: [], taxConditions: [], arcaLookupConfigured: false, tickets: [], users: [], subscribers: [], invoices: [], quote: null };
+const state = { user: null, dashboard: null, categories: [], allCategories: [], capacitySectors: [], methods: [], taxConditions: [], arcaLookupConfigured: false, arcaBillingConfigured: false, tickets: [], users: [], subscribers: [], invoices: [], quote: null };
 
 const money = (cents = 0) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 2 }).format(cents / 100);
 const dateTime = (value) => new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
@@ -52,6 +52,7 @@ async function loadAll() {
   state.methods = methods.methods;
   state.taxConditions = taxConditions.conditions;
   state.arcaLookupConfigured = taxConditions.arcaLookupConfigured;
+  state.arcaBillingConfigured = taxConditions.arcaBillingConfigured;
   state.tickets = tickets.tickets;
   state.users = users?.users || [];
   state.subscribers = subscribers.subscribers;
@@ -305,9 +306,25 @@ function renderInvoices() {
     <td>${escapeHtml(invoice.plate)}<br><small>${dateTime(invoice.requested_at)}</small></td>
     <td>${escapeHtml(invoice.customer_name || "Consumidor final")}${invoice.doc_number ? `<br><small>${escapeHtml(invoice.doc_number)}</small>` : ""}</td>
     <td>${escapeHtml(invoice.tax_condition_name)}</td><td>${money(invoice.charged_cents)}</td>
-    <td><span class="state-badge state-${invoice.status === "authorized" ? "active" : invoice.status === "pending" ? "suspended" : "inactive"}">${statusLabels[invoice.status]}</span></td>
+    <td><span class="state-badge state-${invoice.status === "authorized" ? "active" : invoice.status === "pending" ? "suspended" : "inactive"}">${statusLabels[invoice.status]}</span>
+      ${invoice.voucher_number ? `<br><small>${String(invoice.point_of_sale).padStart(4, "0")}-${String(invoice.voucher_number).padStart(8, "0")}</small>` : ""}
+      ${invoice.error_message ? `<br><small title="${escapeHtml(invoice.error_message)}">${escapeHtml(invoice.error_message)}</small>` : ""}</td>
+    <td>${new Set(["pending", "error"]).has(invoice.status) ? `<button class="authorize-invoice secondary" data-id="${invoice.id}" ${state.arcaBillingConfigured ? "" : "disabled"}>Emitir en ARCA</button>` : "—"}</td>
   </tr>`).join("");
   $("#empty-invoices").classList.toggle("hidden", state.invoices.length > 0);
+  $("#invoice-connection-status").textContent = state.arcaBillingConfigured ? "Conexión con ARCA configurada" : "Falta configurar la conexión con ARCA";
+  $$(".authorize-invoice", tbody).forEach((button) => button.onclick = async () => {
+    if (!confirm("Se enviará el comprobante a ARCA para obtener el CAE. Esta operación fiscal no se puede deshacer desde el sistema. ¿Continuar?")) return;
+    button.disabled = true;
+    button.textContent = "Enviando…";
+    try {
+      await request(`/api/invoices/${button.dataset.id}/authorize`, { method: "POST", body: "{}" });
+      toast("Factura autorizada por ARCA.");
+    } catch (error) {
+      toast(error.message, true);
+    }
+    await loadAll();
+  });
 }
 
 function renderRates() {
