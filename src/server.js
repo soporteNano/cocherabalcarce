@@ -612,6 +612,8 @@ async function api(req, res, url) {
     const body = await readBody(req);
     const plate = normalizePlate(body.plate);
     if (plate.length < 5 || plate.length > 9) throw new Error("Ingrese una patente válida.");
+    const existingTicket = db.prepare("SELECT id FROM tickets WHERE plate = ? AND status = 'open'").get(plate);
+    if (existingTicket) throw new Error("Esa patente ya figura dentro de la cochera.");
     const category = db.prepare("SELECT id, capacity_group FROM categories WHERE id = ? AND active = 1").get(Number(body.categoryId));
     if (!category) throw new Error("Categoría inválida.");
     const availability = capacitySnapshot()[category.capacity_group];

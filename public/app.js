@@ -493,7 +493,8 @@ $("#backup-now").onclick = async () => {
 };
 $("#entry-form").onsubmit = async (event) => {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
   const capacity = selectedCapacity();
   if (capacity?.capacity > 0 && capacity.available <= 0) {
     const reason = prompt("No quedan lugares disponibles. Indicá el motivo para autorizar igualmente el ingreso:");
@@ -503,7 +504,7 @@ $("#entry-form").onsubmit = async (event) => {
   }
   try {
     await request("/api/tickets", { method: "POST", body: JSON.stringify(data) });
-    event.currentTarget.reset(); toast(`Ingreso de ${data.plate.toUpperCase()} registrado.`); await loadAll();
+    form.reset(); toast(`Ingreso de ${data.plate.toUpperCase()} registrado.`); await loadAll();
   } catch (error) { toast(error.message, true); }
 };
 $("#entry-category").onchange = updateEntryCapacity;
