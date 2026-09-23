@@ -119,6 +119,11 @@ db.exec(`
     suggested_cents INTEGER,
     charged_cents INTEGER,
     exception_reason TEXT,
+    customer_tax_condition_id INTEGER NOT NULL DEFAULT 5,
+    customer_name TEXT,
+    customer_doc_type INTEGER,
+    customer_doc_number TEXT,
+    invoice_requested INTEGER NOT NULL DEFAULT 0,
     capacity_override INTEGER NOT NULL DEFAULT 0,
     capacity_reason TEXT,
     status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'closed', 'cancelled')),
@@ -135,6 +140,12 @@ db.exec(`
     active INTEGER NOT NULL DEFAULT 1
   );
 
+  CREATE TABLE IF NOT EXISTS tax_conditions (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1
+  );
+
   CREATE TABLE IF NOT EXISTS payments (
     id INTEGER PRIMARY KEY,
     ticket_id INTEGER NOT NULL REFERENCES tickets(id),
@@ -143,6 +154,25 @@ db.exec(`
     method_id INTEGER NOT NULL REFERENCES payment_methods(id),
     amount_cents INTEGER NOT NULL CHECK(amount_cents >= 0),
     paid_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS invoices (
+    id INTEGER PRIMARY KEY,
+    ticket_id INTEGER NOT NULL UNIQUE REFERENCES tickets(id),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'authorizing', 'authorized', 'rejected', 'error', 'cancelled')),
+    tax_condition_id INTEGER NOT NULL REFERENCES tax_conditions(id),
+    customer_name TEXT,
+    doc_type INTEGER,
+    doc_number TEXT,
+    voucher_type INTEGER,
+    point_of_sale INTEGER,
+    voucher_number INTEGER,
+    cae TEXT,
+    cae_expiration TEXT,
+    arca_response_json TEXT,
+    error_message TEXT,
+    requested_at TEXT NOT NULL,
+    authorized_at TEXT
   );
 
   CREATE TABLE IF NOT EXISTS audit_log (
@@ -155,6 +185,16 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 `);
+
+const insertTaxCondition = db.prepare("INSERT OR IGNORE INTO tax_conditions (id, name) VALUES (?, ?)");
+for (const [id, name] of [
+  [1, "IVA Responsable Inscripto"],
+  [4, "IVA Sujeto Exento"],
+  [5, "Consumidor Final"],
+  [6, "Responsable Monotributo"],
+  [7, "Sujeto No Categorizado"],
+  [15, "IVA No Alcanzado"]
+]) insertTaxCondition.run(id, name);
 
 const shiftColumns = db.prepare("PRAGMA table_info(shifts)").all().map((column) => column.name);
 if (!shiftColumns.includes("close_report_json")) {
@@ -177,6 +217,21 @@ if (!ticketColumns.includes("capacity_override")) {
 }
 if (!ticketColumns.includes("capacity_reason")) {
   db.exec("ALTER TABLE tickets ADD COLUMN capacity_reason TEXT");
+}
+if (!ticketColumns.includes("customer_tax_condition_id")) {
+  db.exec("ALTER TABLE tickets ADD COLUMN customer_tax_condition_id INTEGER NOT NULL DEFAULT 5");
+}
+if (!ticketColumns.includes("customer_name")) {
+  db.exec("ALTER TABLE tickets ADD COLUMN customer_name TEXT");
+}
+if (!ticketColumns.includes("customer_doc_type")) {
+  db.exec("ALTER TABLE tickets ADD COLUMN customer_doc_type INTEGER");
+}
+if (!ticketColumns.includes("customer_doc_number")) {
+  db.exec("ALTER TABLE tickets ADD COLUMN customer_doc_number TEXT");
+}
+if (!ticketColumns.includes("invoice_requested")) {
+  db.exec("ALTER TABLE tickets ADD COLUMN invoice_requested INTEGER NOT NULL DEFAULT 0");
 }
 
 const userCount = db.prepare("SELECT COUNT(*) count FROM users").get().count;

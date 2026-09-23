@@ -70,6 +70,8 @@ npm test
 - ABM de categorías de vehículos, con activación y desactivación sin perder el historial.
 - Capacidad configurable por piso o sector, con cupos separados para autos/camionetas y motos.
 - Disponibilidad estimada durante el ingreso y autorización auditada cuando el cupo está completo.
+- Condición fiscal del cliente en cada ticket, con Consumidor final como valor predeterminado.
+- Registro de solicitudes de factura electrónica pendientes de autorización ante ARCA.
 - Suspensión y reactivación de abonados por administradores y coordinadores, con motivo auditado.
 - Apertura y cierre de turnos.
 - Comprobante imprimible de cierre con movimientos, arqueo y vehículos que permanecen dentro por categoría.

@@ -26,6 +26,7 @@
       <nav>
         <button class="nav-item active" data-view="operation">Operación</button>
         <button class="nav-item" data-view="subscribers">Abonados</button>
+        <button class="nav-item" data-view="invoices" data-operational>Facturación</button>
         <button class="nav-item" data-view="users" data-admin>Empleados y usuarios</button>
         <button class="nav-item" data-view="capacity" data-admin>Capacidad</button>
         <button class="nav-item" data-view="rates" data-admin>Categorías y tarifas</button>
@@ -99,6 +100,13 @@
         </div>
       </section>
 
+      <section id="invoices-view" class="page-view hidden">
+        <section class="panel">
+          <div class="section-heading"><div><p class="eyebrow">Segunda etapa</p><h3>Solicitudes de factura</h3></div><span class="info-note">Pendientes de conexión con ARCA</span></div>
+          <div class="table-wrap"><table><thead><tr><th>Ticket</th><th>Cliente</th><th>Condición fiscal</th><th>Importe</th><th>Estado</th></tr></thead><tbody id="invoices-body"></tbody></table><p id="empty-invoices" class="empty">No hay solicitudes de factura.</p></div>
+        </section>
+      </section>
+
       <section id="capacity-view" class="page-view hidden">
         <div class="admin-grid">
           <section class="panel">
@@ -162,6 +170,13 @@
       <label>Modalidad de cobro<select name="mode"><option value="fraction">Fracciones de 30 minutos</option><option value="daily">Estadía diaria</option><option value="24h">Estadía de 24 horas</option></select></label>
       <div class="quote-box"><span id="quote-time">—</span><strong id="quote-amount">$ 0</strong><small id="quote-detail"></small></div>
       <label>Importe final<input type="number" min="0" step="0.01" name="chargedAmount" required></label>
+      <label>Condición fiscal del cliente<select name="taxConditionId" id="charge-tax-condition"></select></label>
+      <label class="check-row"><input type="checkbox" name="invoiceRequested"> Solicita factura electrónica</label>
+      <div id="customer-fiscal-fields" class="compact-grid hidden">
+        <label>Razón social / nombre<input name="customerName"></label>
+        <label>Documento<select name="customerDocType"><option value="80">CUIT</option><option value="96">DNI</option></select></label>
+        <label class="wide-field">Número de documento<input name="customerDocNumber" inputmode="numeric"></label>
+      </div>
       <div class="section-heading payment-heading"><strong>Medios de pago</strong><button type="button" id="add-payment" class="secondary">Agregar otro</button></div>
       <div id="payment-rows"></div>
       <label>Motivo de excepción<textarea name="exceptionReason" rows="2" placeholder="Obligatorio si cambia el importe"></textarea></label>

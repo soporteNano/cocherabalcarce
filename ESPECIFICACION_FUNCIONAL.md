@@ -127,6 +127,8 @@ Cada entrada registrará como mínimo:
 
 La salida registrará la fecha y hora, el tiempo transcurrido, el cálculo sugerido, las excepciones, el importe final, los medios de pago y el turno de caja.
 
+Cada ticket conservará la condición fiscal del cliente. El valor inicial será Consumidor final y el empleado podrá modificarlo al cobrar. Para otras condiciones se solicitarán razón social y CUIT. Si el cliente solicita factura electrónica, se creará una solicitud pendiente vinculada al ticket, sin alterar el cobro ya registrado.
+
 Los vehículos que permanezcan dentro durante un cambio de turno conservarán su entrada original. El cobro se asociará al turno en el que se registre el pago.
 
 ## Medios de pago
@@ -195,6 +197,8 @@ La segunda etapa incorporará:
 - Asociación del comprobante fiscal con el ticket y el pago.
 - Gestión de errores y reintentos de facturación.
 - Impresión del comprobante en una impresora térmica de 80 mm.
+- Condición frente al IVA del receptor mediante los códigos vigentes informados por ARCA.
+- Cola de solicitudes para distinguir tickets cobrados, facturas pendientes, autorizadas, rechazadas o con error.
 
 La separación entre estadía, pago y comprobante fiscal se mantendrá desde la primera etapa para permitir esta integración sin rehacer la operación principal.
 

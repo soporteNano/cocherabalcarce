@@ -1,6 +1,6 @@
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [...parent.querySelectorAll(selector)];
-const state = { user: null, dashboard: null, categories: [], allCategories: [], capacitySectors: [], methods: [], tickets: [], users: [], subscribers: [], quote: null };
+const state = { user: null, dashboard: null, categories: [], allCategories: [], capacitySectors: [], methods: [], taxConditions: [], tickets: [], users: [], subscribers: [], invoices: [], quote: null };
 
 const money = (cents = 0) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 2 }).format(cents / 100);
 const dateTime = (value) => new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
@@ -38,21 +38,25 @@ function showApp() {
 }
 
 async function loadAll() {
-  const [dashboard, categories, methods, tickets, subscribers, users, allCategories, capacitySectors] = await Promise.all([
-    request("/api/dashboard"), request("/api/categories"), request("/api/payment-methods"), request("/api/tickets"),
+  const [dashboard, categories, methods, taxConditions, tickets, subscribers, users, allCategories, capacitySectors, invoices] = await Promise.all([
+    request("/api/dashboard"), request("/api/categories"), request("/api/payment-methods"), request("/api/tax-conditions"),
+    request("/api/tickets"),
     request("/api/subscribers"),
     state.user.role === "admin" ? request("/api/users") : Promise.resolve({ users: [] }),
     state.user.role === "admin" ? request("/api/categories/all") : Promise.resolve({ categories: [] }),
-    state.user.role === "admin" ? request("/api/capacity-sectors") : Promise.resolve({ sectors: [] })
+    state.user.role === "admin" ? request("/api/capacity-sectors") : Promise.resolve({ sectors: [] }),
+    state.user.role === "viewer" ? Promise.resolve({ invoices: [] }) : request("/api/invoices")
   ]);
   state.dashboard = dashboard;
   state.categories = categories.categories;
   state.methods = methods.methods;
+  state.taxConditions = taxConditions.conditions;
   state.tickets = tickets.tickets;
   state.users = users?.users || [];
   state.subscribers = subscribers.subscribers;
   state.allCategories = allCategories.categories;
   state.capacitySectors = capacitySectors.sectors;
+  state.invoices = invoices.invoices;
   renderDashboard(dashboard);
   renderCategories();
   renderTickets();
@@ -61,6 +65,8 @@ async function loadAll() {
   renderSubscribers();
   renderCategoryAdmin();
   renderCapacitySectors();
+  renderTaxConditions();
+  renderInvoices();
 }
 
 function renderUsers() {
@@ -286,6 +292,23 @@ function renderTickets() {
   $$(".charge", tbody).forEach((button) => button.onclick = () => openCharge(Number(button.dataset.id)));
 }
 
+function renderTaxConditions() {
+  $("#charge-tax-condition").innerHTML = state.taxConditions.map((condition) => `<option value="${condition.id}" ${condition.id === 5 ? "selected" : ""}>${escapeHtml(condition.name)}</option>`).join("");
+}
+
+function renderInvoices() {
+  const tbody = $("#invoices-body");
+  if (!tbody) return;
+  const statusLabels = { pending: "Pendiente", authorizing: "Enviando", authorized: "Autorizada", rejected: "Rechazada", error: "Error", cancelled: "Cancelada" };
+  tbody.innerHTML = state.invoices.map((invoice) => `<tr>
+    <td>${escapeHtml(invoice.plate)}<br><small>${dateTime(invoice.requested_at)}</small></td>
+    <td>${escapeHtml(invoice.customer_name || "Consumidor final")}${invoice.doc_number ? `<br><small>${escapeHtml(invoice.doc_number)}</small>` : ""}</td>
+    <td>${escapeHtml(invoice.tax_condition_name)}</td><td>${money(invoice.charged_cents)}</td>
+    <td><span class="state-badge state-${invoice.status === "authorized" ? "active" : invoice.status === "pending" ? "suspended" : "inactive"}">${statusLabels[invoice.status]}</span></td>
+  </tr>`).join("");
+  $("#empty-invoices").classList.toggle("hidden", state.invoices.length > 0);
+}
+
 function renderRates() {
   $("#rate-cards").innerHTML = state.categories.map((category) => `
     <form class="rate-card" data-category="${category.id}">
@@ -345,6 +368,12 @@ async function openCharge(id) {
   const ticket = state.tickets.find((item) => item.id === id);
   const form = $("#charge-form");
   form.ticketId.value = id;
+  form.taxConditionId.value = "5";
+  form.invoiceRequested.checked = false;
+  form.customerName.value = "";
+  form.customerDocType.value = "80";
+  form.customerDocNumber.value = "";
+  toggleCustomerFiscalFields();
   $("#charge-title").textContent = `Cobrar ${ticket.plate}`;
   state.quote = null;
   $("#payment-rows").innerHTML = "";
@@ -460,6 +489,15 @@ $("#entry-form").onsubmit = async (event) => {
 $("#entry-category").onchange = updateEntryCapacity;
 
 $("#charge-form").mode.onchange = updateQuote;
+$("#charge-form").taxConditionId.onchange = toggleCustomerFiscalFields;
+$("#charge-form").invoiceRequested.onchange = toggleCustomerFiscalFields;
+function toggleCustomerFiscalFields() {
+  const form = $("#charge-form");
+  const mustIdentify = Number(form.taxConditionId.value) !== 5;
+  $("#customer-fiscal-fields").classList.toggle("hidden", !mustIdentify && !form.invoiceRequested.checked);
+  form.customerName.required = mustIdentify;
+  form.customerDocNumber.required = mustIdentify;
+}
 $("#charge-form").onsubmit = async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -471,6 +509,11 @@ $("#charge-form").onsubmit = async (event) => {
       mode: form.mode.value,
       chargedCents: Math.round(Number(form.chargedAmount.value) * 100),
       exceptionReason: form.exceptionReason.value,
+      taxConditionId: Number(form.taxConditionId.value),
+      invoiceRequested: form.invoiceRequested.checked,
+      customerName: form.customerName.value,
+      customerDocType: form.customerDocNumber.value ? Number(form.customerDocType.value) : null,
+      customerDocNumber: form.customerDocNumber.value,
       payments
     }) });
     $("#charge-dialog").close(); form.reset(); toast("Cobro y salida registrados."); await loadAll();
@@ -492,7 +535,7 @@ $$('.nav-item').forEach((button) => button.onclick = () => {
   $$('.nav-item').forEach((item) => item.classList.toggle("active", item === button));
   $$('.page-view').forEach((view) => view.classList.add("hidden"));
   $(`#${button.dataset.view}-view`).classList.remove("hidden");
-  $("#page-title").textContent = ({ rates: "Categorías y tarifas", capacity: "Capacidad de la cochera", users: "Empleados y usuarios", subscribers: "Abonados mensuales", operation: "Movimiento del día" })[button.dataset.view];
+  $("#page-title").textContent = ({ rates: "Categorías y tarifas", capacity: "Capacidad de la cochera", invoices: "Facturación electrónica", users: "Empleados y usuarios", subscribers: "Abonados mensuales", operation: "Movimiento del día" })[button.dataset.view];
 });
 
 request("/api/session").then(async ({ user }) => {

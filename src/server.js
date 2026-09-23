@@ -462,6 +462,21 @@ async function api(req, res, url) {
     json(res, 200, { methods: db.prepare("SELECT * FROM payment_methods WHERE active = 1 ORDER BY id").all() }); return;
   }
 
+  if (req.method === "GET" && url.pathname === "/api/tax-conditions") {
+    json(res, 200, { conditions: db.prepare("SELECT id, name FROM tax_conditions WHERE active = 1 ORDER BY CASE WHEN id = 5 THEN 0 ELSE 1 END, name").all() }); return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/invoices") {
+    if (!requireUser(req, res, ["admin", "coordinator", "employee"])) return;
+    const invoices = db.prepare(`
+      SELECT i.*, t.plate, t.charged_cents, t.exit_at, tc.name tax_condition_name
+      FROM invoices i JOIN tickets t ON t.id = i.ticket_id
+      JOIN tax_conditions tc ON tc.id = i.tax_condition_id
+      ORDER BY i.requested_at DESC
+    `).all();
+    json(res, 200, { invoices }); return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/shifts/open") {
     const body = await readBody(req);
     if (openShift()) throw new Error("Ya existe un turno abierto.");
@@ -586,6 +601,16 @@ async function api(req, res, url) {
     });
     const charged = cents(body.chargedCents);
     const reason = String(body.exceptionReason || "").trim();
+    const taxConditionId = Number(body.taxConditionId || 5);
+    const customerName = String(body.customerName || "").trim();
+    const customerDocType = body.customerDocType ? Number(body.customerDocType) : null;
+    const customerDocNumber = String(body.customerDocNumber || "").replace(/\D/g, "");
+    const invoiceRequested = Boolean(body.invoiceRequested);
+    if (!db.prepare("SELECT id FROM tax_conditions WHERE id = ? AND active = 1").get(taxConditionId)) throw new Error("Condición fiscal del cliente inválida.");
+    if (taxConditionId !== 5 && (!customerName || customerDocType !== 80 || customerDocNumber.length !== 11)) {
+      throw new Error("Para clientes que no sean consumidor final debe ingresar razón social y CUIT de 11 dígitos.");
+    }
+    if (customerDocNumber && !new Set([80, 96]).has(customerDocType)) throw new Error("Tipo de documento inválido.");
     if (charged !== calculation.amountCents && !reason) throw new Error("Debe indicar el motivo de la excepción de precio.");
     if (!Array.isArray(body.payments) || body.payments.length === 0) throw new Error("Debe indicar al menos un medio de pago.");
     const paymentTotal = body.payments.reduce((sum, payment) => sum + cents(payment.amountCents), 0);
@@ -595,8 +620,10 @@ async function api(req, res, url) {
     try {
       db.prepare(`
         UPDATE tickets SET exit_at=?, exit_user_id=?, exit_shift_id=?, pricing_mode=?, tariff_id=?,
-          suggested_cents=?, charged_cents=?, exception_reason=?, status='closed' WHERE id=?
-      `).run(exitAt, user.id, shift.id, body.mode, tariff.id, calculation.amountCents, charged, reason || null, ticket.id);
+          suggested_cents=?, charged_cents=?, exception_reason=?, customer_tax_condition_id=?, customer_name=?,
+          customer_doc_type=?, customer_doc_number=?, invoice_requested=?, status='closed' WHERE id=?
+      `).run(exitAt, user.id, shift.id, body.mode, tariff.id, calculation.amountCents, charged, reason || null,
+        taxConditionId, customerName || null, customerDocType, customerDocNumber || null, invoiceRequested ? 1 : 0, ticket.id);
       const insertPayment = db.prepare(`
         INSERT INTO payments (ticket_id, shift_id, user_id, method_id, amount_cents, paid_at)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -606,7 +633,13 @@ async function api(req, res, url) {
         if (!method) throw new Error("Medio de pago inválido.");
         insertPayment.run(ticket.id, shift.id, user.id, method.id, cents(payment.amountCents), exitAt);
       }
-      audit(user.id, "exit", "ticket", ticket.id, { suggestedCents: calculation.amountCents, chargedCents: charged, reason });
+      if (invoiceRequested) {
+        db.prepare(`
+          INSERT INTO invoices (ticket_id, tax_condition_id, customer_name, doc_type, doc_number, requested_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(ticket.id, taxConditionId, customerName || null, customerDocType, customerDocNumber || null, exitAt);
+      }
+      audit(user.id, "exit", "ticket", ticket.id, { suggestedCents: calculation.amountCents, chargedCents: charged, reason, taxConditionId, invoiceRequested });
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK"); throw error;
