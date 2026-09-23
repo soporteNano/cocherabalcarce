@@ -1,6 +1,6 @@
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [...parent.querySelectorAll(selector)];
-const state = { user: null, dashboard: null, categories: [], allCategories: [], capacitySectors: [], methods: [], taxConditions: [], tickets: [], users: [], subscribers: [], invoices: [], quote: null };
+const state = { user: null, dashboard: null, categories: [], allCategories: [], capacitySectors: [], methods: [], taxConditions: [], arcaLookupConfigured: false, tickets: [], users: [], subscribers: [], invoices: [], quote: null };
 
 const money = (cents = 0) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 2 }).format(cents / 100);
 const dateTime = (value) => new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
@@ -51,6 +51,7 @@ async function loadAll() {
   state.categories = categories.categories;
   state.methods = methods.methods;
   state.taxConditions = taxConditions.conditions;
+  state.arcaLookupConfigured = taxConditions.arcaLookupConfigured;
   state.tickets = tickets.tickets;
   state.users = users?.users || [];
   state.subscribers = subscribers.subscribers;
@@ -373,6 +374,8 @@ async function openCharge(id) {
   form.customerName.value = "";
   form.customerDocType.value = "80";
   form.customerDocNumber.value = "";
+  form.dataset.verifiedCuit = "";
+  $("#arca-lookup-status").textContent = "";
   toggleCustomerFiscalFields();
   $("#charge-title").textContent = `Cobrar ${ticket.plate}`;
   state.quote = null;
@@ -497,11 +500,58 @@ function toggleCustomerFiscalFields() {
   $("#customer-fiscal-fields").classList.toggle("hidden", !mustIdentify && !form.invoiceRequested.checked);
   form.customerName.required = mustIdentify;
   form.customerDocNumber.required = mustIdentify;
+  form.customerName.readOnly = mustIdentify;
+  if (mustIdentify) form.customerDocType.value = "80";
+  form.customerDocType.disabled = mustIdentify;
+  $("#lookup-cuit").classList.toggle("hidden", form.customerDocType.value !== "80");
+  if (mustIdentify && !state.arcaLookupConfigured) {
+    $("#arca-lookup-status").textContent = "La conexión con ARCA requiere configurar el certificado.";
+  }
 }
+
+async function lookupCuit() {
+  const form = $("#charge-form");
+  const cuit = form.customerDocNumber.value.replace(/\D/g, "");
+  form.customerDocNumber.value = cuit;
+  form.dataset.verifiedCuit = "";
+  form.customerName.value = "";
+  if (cuit.length !== 11) {
+    $("#arca-lookup-status").textContent = "El CUIT debe tener 11 dígitos.";
+    return;
+  }
+  $("#arca-lookup-status").textContent = "Consultando ARCA…";
+  $("#lookup-cuit").disabled = true;
+  try {
+    const taxpayer = await request(`/api/arca/taxpayers/${cuit}`);
+    form.customerName.value = taxpayer.legalName;
+    form.dataset.verifiedCuit = taxpayer.cuit;
+    $("#arca-lookup-status").textContent = taxpayer.status ? `Datos confirmados por ARCA · CUIT ${taxpayer.status}` : "Datos confirmados por ARCA";
+  } catch (error) {
+    $("#arca-lookup-status").textContent = error.message;
+    toast(error.message, true);
+  } finally {
+    $("#lookup-cuit").disabled = false;
+  }
+}
+
+$("#lookup-cuit").onclick = lookupCuit;
+$("#charge-form").customerDocType.onchange = toggleCustomerFiscalFields;
+$("#charge-form").customerDocNumber.oninput = () => {
+  const form = $("#charge-form");
+  form.dataset.verifiedCuit = "";
+  if (form.customerDocType.value === "80") form.customerName.value = "";
+  $("#arca-lookup-status").textContent = "";
+  clearTimeout(lookupCuit.timer);
+  const cuit = form.customerDocNumber.value.replace(/\D/g, "");
+  if (form.customerDocType.value === "80" && cuit.length === 11) lookupCuit.timer = setTimeout(lookupCuit, 500);
+};
 $("#charge-form").onsubmit = async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   try {
+    const mustIdentify = Number(form.taxConditionId.value) !== 5;
+    const enteredCuit = form.customerDocNumber.value.replace(/\D/g, "");
+    if (mustIdentify && form.dataset.verifiedCuit !== enteredCuit) throw new Error("Debe consultar y confirmar el CUIT en ARCA antes de cobrar.");
     const payments = $$(".payment-row", form).map((row) => ({
       methodId: Number($("select", row).value), amountCents: Math.round(Number($("input", row).value) * 100)
     }));

@@ -175,6 +175,14 @@ db.exec(`
     authorized_at TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS taxpayer_lookups (
+    cuit TEXT PRIMARY KEY,
+    legal_name TEXT NOT NULL,
+    tax_status TEXT,
+    fetched_at TEXT NOT NULL,
+    fetched_by INTEGER NOT NULL REFERENCES users(id)
+  );
+
   CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY,
     user_id INTEGER REFERENCES users(id),

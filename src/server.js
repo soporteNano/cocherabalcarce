@@ -8,6 +8,7 @@ import { db, audit, activeTariff, nowIso, databasePath } from "./db.js";
 import { hashPassword, verifyPassword } from "./security.js";
 import { calculateSuggestedAmount, elapsedMinutes } from "./pricing.js";
 import { backupStatus, runBackup, startBackupScheduler } from "./backup.js";
+import { arcaLookupConfigured, isValidCuit, lookupTaxpayer, normalizeCuit } from "./arca.js";
 
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 const publicDir = join(root, "public");
@@ -463,7 +464,26 @@ async function api(req, res, url) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/tax-conditions") {
-    json(res, 200, { conditions: db.prepare("SELECT id, name FROM tax_conditions WHERE active = 1 ORDER BY CASE WHEN id = 5 THEN 0 ELSE 1 END, name").all() }); return;
+    json(res, 200, {
+      conditions: db.prepare("SELECT id, name FROM tax_conditions WHERE active = 1 ORDER BY CASE WHEN id = 5 THEN 0 ELSE 1 END, name").all(),
+      arcaLookupConfigured: arcaLookupConfigured()
+    }); return;
+  }
+
+  const taxpayerMatch = url.pathname.match(/^\/api\/arca\/taxpayers\/(\d+)$/);
+  if (req.method === "GET" && taxpayerMatch) {
+    if (!requireUser(req, res, ["admin", "coordinator", "employee"])) return;
+    const cuit = normalizeCuit(taxpayerMatch[1]);
+    if (!isValidCuit(cuit)) throw new Error("Ingrese un CUIT válido de 11 dígitos.");
+    const taxpayer = await lookupTaxpayer(cuit);
+    db.prepare(`
+      INSERT INTO taxpayer_lookups (cuit, legal_name, tax_status, fetched_at, fetched_by)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(cuit) DO UPDATE SET legal_name=excluded.legal_name, tax_status=excluded.tax_status,
+        fetched_at=excluded.fetched_at, fetched_by=excluded.fetched_by
+    `).run(cuit, taxpayer.legalName, taxpayer.status, nowIso(), user.id);
+    audit(user.id, "arca_taxpayer_lookup", "taxpayer", cuit, { legalName: taxpayer.legalName, status: taxpayer.status });
+    json(res, 200, taxpayer); return;
   }
 
   if (req.method === "GET" && url.pathname === "/api/invoices") {
@@ -602,15 +622,20 @@ async function api(req, res, url) {
     const charged = cents(body.chargedCents);
     const reason = String(body.exceptionReason || "").trim();
     const taxConditionId = Number(body.taxConditionId || 5);
-    const customerName = String(body.customerName || "").trim();
+    let customerName = String(body.customerName || "").trim();
     const customerDocType = body.customerDocType ? Number(body.customerDocType) : null;
     const customerDocNumber = String(body.customerDocNumber || "").replace(/\D/g, "");
     const invoiceRequested = Boolean(body.invoiceRequested);
     if (!db.prepare("SELECT id FROM tax_conditions WHERE id = ? AND active = 1").get(taxConditionId)) throw new Error("Condición fiscal del cliente inválida.");
-    if (taxConditionId !== 5 && (!customerName || customerDocType !== 80 || customerDocNumber.length !== 11)) {
-      throw new Error("Para clientes que no sean consumidor final debe ingresar razón social y CUIT de 11 dígitos.");
+    if (taxConditionId !== 5 && (customerDocType !== 80 || !isValidCuit(customerDocNumber))) {
+      throw new Error("Para clientes que no sean consumidor final debe ingresar y consultar en ARCA un CUIT válido.");
     }
     if (customerDocNumber && !new Set([80, 96]).has(customerDocType)) throw new Error("Tipo de documento inválido.");
+    if (customerDocType === 80 && customerDocNumber) {
+      const verifiedTaxpayer = db.prepare("SELECT legal_name FROM taxpayer_lookups WHERE cuit = ?").get(customerDocNumber);
+      if (!verifiedTaxpayer) throw new Error("Debe consultar el CUIT en ARCA antes de registrar el cobro.");
+      customerName = verifiedTaxpayer.legal_name;
+    }
     if (charged !== calculation.amountCents && !reason) throw new Error("Debe indicar el motivo de la excepción de precio.");
     if (!Array.isArray(body.payments) || body.payments.length === 0) throw new Error("Debe indicar al menos un medio de pago.");
     const paymentTotal = body.payments.reduce((sum, payment) => sum + cents(payment.amountCents), 0);

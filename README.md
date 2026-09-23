@@ -72,6 +72,7 @@ npm test
 - Disponibilidad estimada durante el ingreso y autorización auditada cuando el cupo está completo.
 - Condición fiscal del cliente en cada ticket, con Consumidor final como valor predeterminado.
 - Registro de solicitudes de factura electrónica pendientes de autorización ante ARCA.
+- Consulta de razón social por CUIT mediante el servicio Padrón Constancia de Inscripción de ARCA. La interfaz queda disponible y requiere certificado, autorización y credenciales WSAA para efectuar consultas reales.
 - Suspensión y reactivación de abonados por administradores y coordinadores, con motivo auditado.
 - Apertura y cierre de turnos.
 - Comprobante imprimible de cierre con movimientos, arqueo y vehículos que permanecen dentro por categoría.

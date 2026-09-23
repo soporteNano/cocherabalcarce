@@ -173,9 +173,9 @@
       <label>Condición fiscal del cliente<select name="taxConditionId" id="charge-tax-condition"></select></label>
       <label class="check-row"><input type="checkbox" name="invoiceRequested"> Solicita factura electrónica</label>
       <div id="customer-fiscal-fields" class="compact-grid hidden">
-        <label>Razón social / nombre<input name="customerName"></label>
+        <label>Razón social / nombre<input name="customerName"><small id="arca-lookup-status" class="info-note"></small></label>
         <label>Documento<select name="customerDocType"><option value="80">CUIT</option><option value="96">DNI</option></select></label>
-        <label class="wide-field">Número de documento<input name="customerDocNumber" inputmode="numeric"></label>
+        <label class="wide-field">Número de documento<input name="customerDocNumber" inputmode="numeric"><button type="button" id="lookup-cuit" class="secondary compact-action">Consultar CUIT en ARCA</button></label>
       </div>
       <div class="section-heading payment-heading"><strong>Medios de pago</strong><button type="button" id="add-payment" class="secondary">Agregar otro</button></div>
       <div id="payment-rows"></div>
