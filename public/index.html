@@ -48,10 +48,10 @@
           <article class="stat-card capacity-stat"><span>Disponibles motos</span><strong id="stat-moto-available">Sin configurar</strong></article>
         </div>
 
-        <section id="shift-panel" class="panel"></section>
+        <section id="shift-panel" class="panel" data-operational></section>
 
         <div class="work-grid">
-          <section class="panel entry-panel">
+          <section class="panel entry-panel" data-operational>
             <div class="section-heading"><div><p class="eyebrow">Nuevo movimiento</p><h3>Registrar ingreso</h3></div></div>
             <form id="entry-form">
               <label>Patente<input name="plate" class="plate-input" maxlength="9" placeholder="AA123BB" required></label>
@@ -62,7 +62,7 @@
           </section>
 
           <section class="panel vehicles-panel">
-            <div class="section-heading"><div><p class="eyebrow">Estado actual</p><h3>Vehículos dentro</h3></div><button id="refresh" class="secondary">Actualizar</button></div>
+            <div class="section-heading"><div><p class="eyebrow">Estado actual</p><h3>Vehículos dentro</h3></div><div class="table-actions"><input id="vehicle-search" class="search-input" placeholder="Buscar patente"><button id="refresh" class="secondary">Actualizar</button></div></div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Patente</th><th>Categoría</th><th>Ingreso</th><th>Tiempo</th><th></th></tr></thead>
@@ -125,7 +125,7 @@
             <form id="create-user-form">
               <label>Nombre completo<input name="displayName" required minlength="3" autocomplete="off"></label>
               <label>Nombre de usuario<input name="username" required minlength="3" maxlength="30" autocomplete="off"></label>
-              <label>Rol<select name="role"><option value="employee">Empleado / cajero</option><option value="coordinator">Coordinador / encargado</option><option value="admin">Administrador</option></select></label>
+              <label>Rol<select name="role"><option value="employee">Empleado / cajero</option><option value="coordinator">Coordinador / encargado</option><option value="viewer">Consulta / recorredor</option><option value="admin">Administrador</option></select></label>
               <label>Contraseña inicial<input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
               <button class="primary wide" type="submit">Crear usuario</button>
             </form>

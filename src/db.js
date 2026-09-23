@@ -19,6 +19,7 @@ db.exec(`
     display_name TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL CHECK(role IN ('employee', 'coordinator', 'admin')),
+    access_level TEXT NOT NULL DEFAULT 'operational',
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
@@ -158,6 +159,11 @@ db.exec(`
 const shiftColumns = db.prepare("PRAGMA table_info(shifts)").all().map((column) => column.name);
 if (!shiftColumns.includes("close_report_json")) {
   db.exec("ALTER TABLE shifts ADD COLUMN close_report_json TEXT");
+}
+
+const userColumns = db.prepare("PRAGMA table_info(users)").all().map((column) => column.name);
+if (!userColumns.includes("access_level")) {
+  db.exec("ALTER TABLE users ADD COLUMN access_level TEXT NOT NULL DEFAULT 'operational'");
 }
 
 const categoryColumns = db.prepare("PRAGMA table_info(categories)").all().map((column) => column.name);

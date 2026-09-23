@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes, randomUUID } from "node:crypto";
+import { networkInterfaces } from "node:os";
 import { db, audit, activeTariff, nowIso, databasePath } from "./db.js";
 import { hashPassword, verifyPassword } from "./security.js";
 import { calculateSuggestedAmount, elapsedMinutes } from "./pricing.js";
@@ -11,6 +12,7 @@ import { backupStatus, runBackup, startBackupScheduler } from "./backup.js";
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 const publicDir = join(root, "public");
 const port = Number(process.env.PORT || 3210);
+const host = process.env.HOST || "0.0.0.0";
 const sessions = new Map();
 
 const json = (res, status, value, headers = {}) => {
@@ -36,7 +38,9 @@ function currentUser(req) {
   const token = parseCookies(req.headers.cookie).session;
   const session = token && sessions.get(token);
   if (!session || session.expiresAt < Date.now()) return null;
-  return db.prepare("SELECT id, username, display_name, role FROM users WHERE id = ? AND active = 1").get(session.userId) || null;
+  return db.prepare(`SELECT id, username, display_name,
+    CASE WHEN access_level = 'viewer' THEN 'viewer' ELSE role END role,
+    access_level FROM users WHERE id = ? AND active = 1`).get(session.userId) || null;
 }
 
 function requireUser(req, res, roles) {
@@ -86,7 +90,7 @@ function tomorrowDate() {
   return date.toISOString().slice(0, 10);
 }
 
-const validRoles = new Set(["employee", "coordinator", "admin"]);
+const validRoles = new Set(["employee", "coordinator", "admin", "viewer"]);
 
 function validatePassword(password) {
   if (String(password || "").length < 8) throw new Error("La contraseña debe tener al menos 8 caracteres.");
@@ -123,7 +127,8 @@ async function api(req, res, url) {
     const token = randomBytes(32).toString("hex");
     sessions.set(token, { userId: user.id, expiresAt: Date.now() + 12 * 60 * 60 * 1000 });
     audit(user.id, "login", "session", token.slice(0, 8));
-    json(res, 200, { user: { id: user.id, username: user.username, display_name: user.display_name, role: user.role } }, {
+    const effectiveRole = user.access_level === "viewer" ? "viewer" : user.role;
+    json(res, 200, { user: { id: user.id, username: user.username, display_name: user.display_name, role: effectiveRole, access_level: user.access_level } }, {
       "set-cookie": `session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`
     });
     return;
@@ -138,6 +143,9 @@ async function api(req, res, url) {
 
   const user = requireUser(req, res);
   if (!user) return;
+  if (user.access_level === "viewer" && req.method !== "GET") {
+    json(res, 403, { error: "El perfil de consulta no puede realizar modificaciones." }); return;
+  }
 
   if (req.method === "GET" && url.pathname === "/api/session") {
     json(res, 200, { user }); return;
@@ -146,7 +154,9 @@ async function api(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/users") {
     if (!requireUser(req, res, ["admin"])) return;
     const users = db.prepare(`
-      SELECT id, username, display_name, role, active, created_at
+      SELECT id, username, display_name,
+        CASE WHEN access_level = 'viewer' THEN 'viewer' ELSE role END role,
+        access_level, active, created_at
       FROM users ORDER BY active DESC, display_name COLLATE NOCASE
     `).all();
     json(res, 200, { users }); return;
@@ -163,9 +173,11 @@ async function api(req, res, url) {
     if (!validRoles.has(role)) throw new Error("Rol inválido.");
     const password = validatePassword(body.password);
     try {
+      const storedRole = role === "viewer" ? "employee" : role;
+      const accessLevel = role === "viewer" ? "viewer" : "operational";
       const result = db.prepare(`
-        INSERT INTO users (username, display_name, password_hash, role) VALUES (?, ?, ?, ?)
-      `).run(username, displayName, hashPassword(password), role);
+        INSERT INTO users (username, display_name, password_hash, role, access_level) VALUES (?, ?, ?, ?, ?)
+      `).run(username, displayName, hashPassword(password), storedRole, accessLevel);
       audit(user.id, "create", "user", result.lastInsertRowid, { username, displayName, role });
       json(res, 201, { id: Number(result.lastInsertRowid) });
     } catch (error) {
@@ -188,7 +200,9 @@ async function api(req, res, url) {
     if (displayName.length < 3) throw new Error("Ingrese el nombre completo del empleado.");
     if (!validRoles.has(role)) throw new Error("Rol inválido.");
     if (targetId === user.id && (!active || role !== "admin")) throw new Error("No puede quitarse su propio acceso de administrador.");
-    db.prepare("UPDATE users SET display_name = ?, role = ?, active = ? WHERE id = ?").run(displayName, role, active, targetId);
+    const storedRole = role === "viewer" ? "employee" : role;
+    const accessLevel = role === "viewer" ? "viewer" : "operational";
+    db.prepare("UPDATE users SET display_name = ?, role = ?, access_level = ?, active = ? WHERE id = ?").run(displayName, storedRole, accessLevel, active, targetId);
     audit(user.id, "update", "user", targetId, { displayName, role, active: Boolean(active) });
     json(res, 200, { ok: true }); return;
   }
@@ -626,8 +640,12 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(port, "127.0.0.1", () => {
+server.listen(port, host, () => {
   console.log(`Cochera Balcarce disponible en http://127.0.0.1:${port}`);
+  if (host === "0.0.0.0" || host === "::") {
+    const localAddresses = Object.values(networkInterfaces()).flat().filter((item) => item && item.family === "IPv4" && !item.internal);
+    for (const address of localAddresses) console.log(`Acceso desde la red local: http://${address.address}:${port}`);
+  }
   console.log(`Base de datos: ${databasePath}`);
 });
 

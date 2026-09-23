@@ -32,8 +32,9 @@ function showApp() {
   $("#login-view").classList.add("hidden");
   $("#app-view").classList.remove("hidden");
   $("#user-name").textContent = state.user.display_name;
-  $("#user-role").textContent = ({ admin: "Administrador", coordinator: "Coordinador", employee: "Empleado" })[state.user.role];
+  $("#user-role").textContent = ({ admin: "Administrador", coordinator: "Coordinador", employee: "Empleado", viewer: "Consulta / recorredor" })[state.user.role];
   $$('[data-admin]').forEach((el) => el.classList.toggle("hidden", state.user.role !== "admin"));
+  $$('[data-operational]').forEach((el) => el.classList.toggle("hidden", state.user.role === "viewer"));
 }
 
 async function loadAll() {
@@ -62,8 +63,6 @@ async function loadAll() {
   renderCapacitySectors();
 }
 
-const roleLabel = (role) => ({ employee: "Empleado / cajero", coordinator: "Coordinador", admin: "Administrador" })[role] || role;
-
 function renderUsers() {
   const tbody = $("#users-body");
   if (!tbody) return;
@@ -71,7 +70,7 @@ function renderUsers() {
     <tr data-user-id="${item.id}">
       <td><input class="user-name-input" value="${escapeHtml(item.display_name)}"></td>
       <td><strong>${escapeHtml(item.username)}</strong></td>
-      <td><select class="role-select"><option value="employee" ${item.role === "employee" ? "selected" : ""}>Empleado / cajero</option><option value="coordinator" ${item.role === "coordinator" ? "selected" : ""}>Coordinador</option><option value="admin" ${item.role === "admin" ? "selected" : ""}>Administrador</option></select></td>
+      <td><select class="role-select"><option value="employee" ${item.role === "employee" ? "selected" : ""}>Empleado / cajero</option><option value="coordinator" ${item.role === "coordinator" ? "selected" : ""}>Coordinador</option><option value="viewer" ${item.role === "viewer" ? "selected" : ""}>Consulta / recorredor</option><option value="admin" ${item.role === "admin" ? "selected" : ""}>Administrador</option></select></td>
       <td><label class="status-toggle"><input type="checkbox" class="active-toggle" ${item.active ? "checked" : ""}> Activo</label></td>
       <td><div class="table-actions"><button class="secondary save-user" type="button">Guardar</button><button class="secondary reset-password" type="button">Contraseña</button></div></td>
     </tr>
@@ -277,10 +276,13 @@ async function changeSubscriberStatus(id, status) {
 
 function renderTickets() {
   const tbody = $("#tickets-body");
-  tbody.innerHTML = state.tickets.map((ticket) => `
-    <tr><td>${ticket.plate}</td><td>${ticket.category_name}</td><td>${dateTime(ticket.entry_at)}</td><td>${duration(ticket.entry_at)}</td><td><button class="primary charge" data-id="${ticket.id}">Cobrar</button></td></tr>
+  const query = $("#vehicle-search").value.trim().toUpperCase();
+  const tickets = state.tickets.filter((ticket) => !query || ticket.plate.includes(query));
+  tbody.innerHTML = tickets.map((ticket) => `
+    <tr><td>${ticket.plate}</td><td>${ticket.category_name}</td><td>${dateTime(ticket.entry_at)}</td><td>${duration(ticket.entry_at)}</td><td>${state.user.role === "viewer" ? "" : `<button class="primary charge" data-id="${ticket.id}">Cobrar</button>`}</td></tr>
   `).join("");
-  $("#empty-tickets").classList.toggle("hidden", state.tickets.length > 0);
+  $("#empty-tickets").textContent = query ? "No se encontraron vehículos con esa patente." : "No hay vehículos dentro.";
+  $("#empty-tickets").classList.toggle("hidden", tickets.length > 0);
   $$(".charge", tbody).forEach((button) => button.onclick = () => openCharge(Number(button.dataset.id)));
 }
 
@@ -435,6 +437,7 @@ $("#subscriber-form").onsubmit = async (event) => {
 };
 $("#cancel-subscriber-edit").onclick = resetSubscriberForm;
 $("#refresh").onclick = () => loadAll().catch((error) => toast(error.message, true));
+$("#vehicle-search").oninput = renderTickets;
 $("#backup-now").onclick = async () => {
   try { await request("/api/backups", { method: "POST", body: "{}" }); toast("Respaldo creado y verificado."); await loadAll(); }
   catch (error) { toast(error.message, true); }

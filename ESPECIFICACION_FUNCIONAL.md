@@ -7,7 +7,7 @@ El proyecto se divide en dos etapas:
 1. Gestión local de entradas, salidas, estadías, abonados, cobros, usuarios, turnos de caja y respaldos.
 2. Facturación electrónica mediante ARCA e impresión de comprobantes en una impresora térmica de 80 mm.
 
-La aplicación se utilizará desde una sola computadora. La operación principal y la base de datos deben funcionar localmente, incluso cuando no haya conexión a Internet.
+La aplicación y la base de datos se ejecutarán en una computadora principal y deben funcionar localmente, incluso cuando no haya conexión a Internet. Otros equipos o celulares podrán acceder mediante un navegador cuando estén conectados a la misma red local. Todos utilizarán la única base alojada en la computadora principal.
 
 ## Usuarios y permisos
 
@@ -19,6 +19,13 @@ Cada persona accederá con un usuario y una contraseña individual.
 - Abrir y cerrar turnos de caja.
 - Aplicar excepciones manuales a los importes sugeridos.
 - Resolver manualmente casos especiales de abonados, dejando una observación.
+
+### Consulta o recorredor
+
+- Acceder desde un celular u otro equipo de la misma red local.
+- Buscar patentes y consultar los vehículos que se encuentran dentro.
+- Consultar abonados, estados y disponibilidad estimada.
+- No podrá registrar movimientos, cobrar, operar la caja ni modificar configuraciones.
 
 ### Coordinador o encargado
 

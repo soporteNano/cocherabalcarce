@@ -21,6 +21,14 @@ Luego abrir <http://127.0.0.1:3210> en el navegador.
 
 En Windows también se puede iniciar con doble clic en `Iniciar Cochera.cmd`.
 
+### Acceso desde celulares u otras computadoras
+
+Al iniciar, la consola muestra una dirección de red local, por ejemplo `http://192.168.1.20:3210`. Un celular o computadora conectado al mismo Wi-Fi puede abrir esa dirección en el navegador.
+
+En Windows, la primera ejecución puede mostrar una solicitud del firewall. Se debe permitir Node.js únicamente en redes privadas. No se debe abrir el puerto en el router ni publicar esta dirección en Internet.
+
+Para recorridas, el administrador puede crear un usuario con rol **Consulta / recorredor**. Este perfil puede buscar patentes, ver vehículos dentro, consultar abonados y disponibilidad, pero el servidor rechaza cobros, movimientos y cambios de configuración.
+
 ### Inicio en Linux
 
 Después de descargar o clonar el proyecto:
@@ -57,6 +65,7 @@ npm test
 
 - Inicio de sesión y perfiles base.
 - ABM de empleados y usuarios: alta, roles, activación, desactivación y restablecimiento de contraseña.
+- Acceso simultáneo desde navegadores de la misma red local y perfil móvil de consulta sin permisos de modificación.
 - ABM de abonados mensuales con datos de contacto, plan, categoría, fecha de alta y múltiples patentes.
 - ABM de categorías de vehículos, con activación y desactivación sin perder el historial.
 - Capacidad configurable por piso o sector, con cupos separados para autos/camionetas y motos.

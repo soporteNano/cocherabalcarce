@@ -94,6 +94,7 @@ td:first-child { font-weight: 900; letter-spacing: .05em; }
 .status-toggle input { width: auto; }
 .table-actions { display: flex; gap: 6px; }
 .table-actions button { padding: 8px 10px; white-space: nowrap; }
+.search-input { min-width: 170px; padding: 8px 10px; }
 .info-note { color: var(--muted); font-size: 12px; }
 .rate-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; }
 .rate-card { padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: white; }
