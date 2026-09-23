@@ -28,6 +28,14 @@ function toast(message, error = false) {
   toast.timer = setTimeout(() => element.className = "toast", 3200);
 }
 
+function showMessage(title, message) {
+  $("#message-dialog-title").textContent = title;
+  $("#message-dialog-text").textContent = message;
+  $("#message-dialog").showModal();
+}
+
+$("#message-dialog-close").onclick = () => $("#message-dialog").close();
+
 function showApp() {
   $("#login-view").classList.add("hidden");
   $("#app-view").classList.remove("hidden");
@@ -505,7 +513,10 @@ $("#entry-form").onsubmit = async (event) => {
   try {
     await request("/api/tickets", { method: "POST", body: JSON.stringify(data) });
     form.reset(); toast(`Ingreso de ${data.plate.toUpperCase()} registrado.`); await loadAll();
-  } catch (error) { toast(error.message, true); }
+  } catch (error) {
+    if (error.message === "Esa patente ya figura dentro de la cochera.") showMessage("Patente ya ingresada", error.message);
+    else toast(error.message, true);
+  }
 };
 $("#entry-category").onchange = updateEntryCapacity;
 

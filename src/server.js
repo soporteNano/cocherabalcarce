@@ -622,10 +622,18 @@ async function api(req, res, url) {
     if (availability.capacity > 0 && availability.available <= 0 && !override) throw new Error("No quedan lugares disponibles para esta categoría.");
     if (override && !capacityReason) throw new Error("Debe indicar el motivo para autorizar el ingreso sin disponibilidad.");
     const publicId = randomUUID();
-    const result = db.prepare(`
-      INSERT INTO tickets (public_id, plate, category_id, entry_at, entry_user_id, entry_shift_id, capacity_override, capacity_reason)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(publicId, plate, category.id, nowIso(), user.id, shift.id, override ? 1 : 0, override ? capacityReason : null);
+    let result;
+    try {
+      result = db.prepare(`
+        INSERT INTO tickets (public_id, plate, category_id, entry_at, entry_user_id, entry_shift_id, capacity_override, capacity_reason)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(publicId, plate, category.id, nowIso(), user.id, shift.id, override ? 1 : 0, override ? capacityReason : null);
+    } catch (error) {
+      if (String(error.message).includes("UNIQUE") && String(error.message).includes("tickets.plate")) {
+        throw new Error("Esa patente ya figura dentro de la cochera.");
+      }
+      throw error;
+    }
     audit(user.id, "entry", "ticket", result.lastInsertRowid, { plate, categoryId: category.id, capacityOverride: override, capacityReason });
     json(res, 201, { id: Number(result.lastInsertRowid), publicId, plate }); return;
   }
